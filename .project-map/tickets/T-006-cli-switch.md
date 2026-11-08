@@ -2,7 +2,7 @@
 id: T-006
 title: CLI page switches account
 type: build
-status: open
+status: closed
 blocked_by: [T-005]
 claimed_by:
 supersedes:
@@ -98,3 +98,5 @@ and save the evidence. Then close T-006. No production defect was reproduced.
 Undo: revert `dfbd139`. No migration is required. Keychain restoration itself can
 be refused by macOS; that case reports recovery failure instead of claiming
 success. Commands exceeding security's safe stdin limit are refused before write.
+
+Closed 2026-11-08 (Claude review): all four boxes have evidence. The tray click itself moved to T-009; the tray item calls the same `Store::switch_cli` path that was exercised for real through the window.

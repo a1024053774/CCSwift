@@ -4,7 +4,7 @@ title: End-to-end acceptance by computer use
 type: build
 status: open
 blocked_by: [T-008]
-claimed_by: Codex
+claimed_by:
 supersedes:
 ---
 
@@ -57,3 +57,5 @@ These runs check the frozen candidate's existing behavior; they do not replace t
 - `git diff --check` and `python3 /Users/luckye/.claude/skills/project-map/scripts/project_map.py status --root .`: results saved in `diff-check.txt` and `project-map-status.txt`.
 
 Works: release launch, Desktop rendering, window CLI round trip, six appearance captures, and restoration have direct evidence. No regression: both workspace suites and clippy pass; no product code changed. Risk / undo: acceptance is incomplete for tray and usage; reverting this documentation commit removes the record only. The test bundle and artifacts remain local, the original app is running, and no account-store rollback is needed.
+
+Update 2026-11-08 (Claude): the active-slot Keychain lookup was fixed in T-010 (`-a <user>`); after it, active slot shows 73% matching cswap. Slot 3 got HTTP 429 from the usage endpoint during T-010, so the full three-account match is still unchecked. Tray click unverified: computer-use access to the app was declined; left for the user to click once.

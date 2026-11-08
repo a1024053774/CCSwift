@@ -4,99 +4,51 @@
 
 <h1 align="center">CC Same Plus</h1>
 
-CC Same Plus extends [songkeys/cc-same](https://github.com/songkeys/cc-same) with a separate Claude Code account switcher and a unified usage view, using the account store and CLI behavior of [realiti4/claude-swap](https://github.com/realiti4/claude-swap). Desktop session sync and saved logins stay shared with CC Same.
-
 <p align="center">
-  <a href="https://github.com/songkeys/cc-same/actions/workflows/ci.yml"><img src="https://github.com/songkeys/cc-same/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/songkeys/cc-same/releases"><img src="https://img.shields.io/github/v/release/songkeys/cc-same?include_prereleases&label=release" alt="Release"></a>
+  One macOS menu-bar app to switch Claude accounts, separately for Claude Desktop and for Claude Code (CLI),
+  with every account's plan usage in one place.
 </p>
 
-<p align="center">
-  Keep Claude Desktop's local sessions identical across all your accounts.<br>
-  Sign out, sign in with another account, and everything is still there.
-</p>
+CC Same Plus is a fork of [songkeys/cc-same](https://github.com/songkeys/cc-same). It keeps CC Same's
+Desktop session sync and one-click Desktop switching unchanged, and adds the CLI account switching of
+[realiti4/claude-swap](https://github.com/realiti4/claude-swap) as a GUI. Thanks to both projects.
 
-<p align="center">
-  <img src="docs/images/app-light.png" width="380" alt="CC Same in light mode">
-  &nbsp;
-  <img src="docs/images/app-dark.png" width="380" alt="CC Same in dark mode">
-</p>
+## What it does
 
-## Why
+The window has three pages: **Desktop | CLI | Usage**.
 
-Claude Desktop keeps a separate list of local Code sessions for every account and organization.
-Switch accounts and the sidebar is empty, even though every conversation is still on disk in
-`~/.claude/projects`. CC Same keeps every account's list in step: sessions, titles, archive
-state, deletions, scheduled tasks and task suggestions. Whichever account you sign in to looks the same.
+- **Desktop**: CC Same as it is. Local Code sessions stay identical across accounts; switching
+  restarts Claude Desktop signed in to the other account.
+- **CLI**: the accounts in claude-swap's store (`~/.claude-swap-backup`), in slot order. Click
+  **Switch** (or use the tray's *CLI* submenu) to change the account the `claude` command uses,
+  exactly as `cswap switch <n>` would. Claude Desktop is not touched. Add accounts with `cswap add`.
+- **Usage**: one row per account (joined by email) with the 5-hour and weekly bars, when each
+  window resets, and when the reading was taken. CLI numbers come from the OAuth usage endpoint
+  with each account's stored token (on open and on Refresh, at most once a minute per account);
+  Desktop numbers come from Claude Desktop's local history. Tokens are never refreshed and no
+  account store is written by this page.
 
-It works on **macOS**, **Windows** and **Linux** (unofficial Linux builds of Claude Desktop), and
-comes as a small desktop app and a command-line tool. Both share one engine.
+Desktop and CLI are switched independently. Light and dark follow the system, in plain black and white.
 
-## The app
+## Install (macOS, Apple Silicon)
 
-This fork adds a **Desktop | CLI | Usage** selector. The CLI page reads claude-swap's
-account list in sequence order, showing slot, email, organization, and the active
-identity reported by `.claude.json`, as `cswap list` does. Select CLI again or
-press Cmd+R to reread it. On macOS, use Switch beside an account or choose it
-from the tray’s CLI submenu. Switching saves the outgoing credential before
-activating the selected login; Claude Desktop is unaffected. Add accounts with
-`cswap add`. Listing loads metadata in the background without Keychain or network
-access; switching also runs in the background.
+Download `CC-Same-Plus-<version>-macos-arm64.dmg` from
+[Releases](https://github.com/a1024053774/cc-same/releases) and drag **CC Same Plus** to Applications.
 
-The Usage page joins accounts by email in compact rows with 5-hour and weekly
-bars side by side. Each row prefers a successful CLI reading and shows its source, age, and reset times; Desktop-only reset times are unknown (—). Desktop usage comes from
-its local history. Opening Usage or pressing Refresh (Cmd+R) reads CLI usage
-from the OAuth endpoint, at most once a minute per email while the app runs.
-The active CLI slot uses its live Keychain credential; other slots use their backups.
-Keychain and network work run in the background. Failed requests keep the last
-reading in memory, or show unavailable; expired credentials show “needs cswap
-refresh”. This view never refreshes tokens or writes account stores.
+- The build is **ad-hoc signed, not notarized**. If macOS blocks it, use
+  **System Settings → Privacy & Security → Open Anyway** after checking the source.
+- It shares CC Same's state folder (`~/Library/Application Support/cc-same`), so Desktop logins
+  you saved in CC Same carry over. Run only one of CC Same and CC Same Plus at a time.
+- It does not update itself. CLI switching needs `cswap` accounts already added.
+- Only tested on one Apple Silicon Mac. Windows and Linux builds of the fork are not provided.
 
-- **One glance.** Each account is a ring; rings that share every session overlap, and one that is
-  behind drifts out until it catches up. One sentence says what is going on.
-- **One switch.** *Sync in the background* keeps every account identical from login, even with the
-  window closed.
-- **Menu bar / system tray.** The status, *Sync now* and the background switch are a click away.
-  Hide the icon in Settings, and choose whether the app opens quietly at login. On macOS the app
-  is in the Dock only while its window is open, unless you set it to stay.
-- **Speaks your language.** English, 简体中文, 繁體中文, 日本語, 한국어, Français, Deutsch, Español,
-  Português (Brasil) and Русский, following the system unless you pick one. Light and dark follow
-  the system too.
-- **Undo built in.** Snapshots of every session list, restorable from Settings.
-- **One-click account switching** (macOS). Switch Claude to another account from the window or the
-  menu bar, without signing out: CC Same keeps each sign-in and trades them while Claude restarts.
-  Your accounts form a numbered list, the way [claude-swap](https://github.com/realiti4/claude-swap)
-  keeps one: **Next Account** goes round it, and each account shows its 5-hour and weekly plan
-  usage as Claude last read it.
-- **Keeps itself up to date.** A new version downloads in the background and installs when the
-  window is closed or the app quits; *What's new* shows what changed.
-
-## Install
-
-**App.** Download `CC-Same-<version>-<platform>` from
-[Releases](https://github.com/songkeys/cc-same/releases): the `.dmg` for `macos-arm64` or `macos-x64`,
-or the archive for `windows-x64`, `linux-x64` or `linux-arm64`. Open it and switch on
-**Sync in the background**. This fork does not check for or install upstream app updates.
-
-- The Mac app is signed with a Developer ID and notarized by Apple.
-- The Windows build is not code-signed yet, so SmartScreen may ask first: **More info → Run anyway**.
-- On Linux, unpack the archive into `~/.local`:
-  `tar -xzf CC-Same-<version>-linux-x64.tar.gz -C ~/.local --strip-components=1`.
-  The tray icon needs StatusNotifier support: KDE has it, and so does GNOME with the AppIndicator
-  extension (on by default in Ubuntu). Without it, closing the window quits the app; background
-  sync keeps running either way.
-
-**Command line.**
+## Build
 
 ```bash
-cargo install --locked --git https://github.com/songkeys/cc-same cc-same
-cc-same install
+cargo test --workspace
+cargo test --manifest-path crates/app/Cargo.toml
+scripts/bundle-macos.sh          # dist/CC Same Plus.app, .dmg, .zip
 ```
-
-or grab `cc-same-cli-<version>-<platform>` from Releases.
-
-The first time a sync copies sessions into the account Claude has open, quit and reopen Claude
-once: it only reads its session list at startup. After that, switching accounts needs nothing.
 
 ## Using the command line
 
