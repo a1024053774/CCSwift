@@ -46,8 +46,6 @@ actions!(cc_same, [Refresh, SyncNow, OpenSettings]);
 pub struct UniApp {
     store: Entity<Store>,
     cli_page: bool,
-    cli_accounts: Option<Result<Vec<cc_same_core::cli_accounts::Account>, String>>,
-    cli_loading: bool,
     /// The account under the pointer, in the list or in the picture.
     hovered: Option<SharedString>,
     /// False until the first frame with data has been drawn, so the rings fly in and the
@@ -69,16 +67,7 @@ impl UniApp {
         ];
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
-        UniApp {
-            store,
-            cli_page: false,
-            cli_accounts: None,
-            cli_loading: false,
-            hovered: None,
-            gathered: false,
-            focus,
-            _subscriptions: subscriptions,
-        }
+        UniApp { store, cli_page: false, hovered: None, gathered: false, focus, _subscriptions: subscriptions }
     }
 
     /// A still picture (screenshots): everything already in place.
@@ -86,8 +75,6 @@ impl UniApp {
         UniApp {
             store,
             cli_page: false,
-            cli_accounts: None,
-            cli_loading: false,
             hovered: None,
             gathered: true,
             focus: cx.focus_handle(),
@@ -102,29 +89,7 @@ impl UniApp {
     // ------------------------------------------------------------------ actions
 
     fn refresh_cli(&mut self, cx: &mut Context<Self>) {
-        if self.cli_loading {
-            return;
-        }
-        self.cli_loading = true;
-        cx.spawn(async move |this, cx| {
-            let result = cx
-                .background_executor()
-                .spawn(async {
-                    std::env::var_os("HOME")
-                        .ok_or_else(|| "Cannot locate the CLI account store: HOME is not set".to_string())
-                        .and_then(|home| {
-                            cc_same_core::cli_accounts::list(std::path::Path::new(&home))
-                                .map_err(|error| format!("{error:#}"))
-                        })
-                })
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                this.cli_loading = false;
-                this.cli_accounts = Some(result);
-                cx.notify();
-            });
-        })
-        .detach();
+        self.store.update(cx, |store, cx| store.refresh_cli(cx));
     }
 
     fn sync_now(&mut self, cx: &mut Context<Self>) {
@@ -461,9 +426,11 @@ impl UniApp {
     fn render_cli(&self, cx: &Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         let mut list = surface(cx).p_1().gap_px();
-        match &self.cli_accounts {
+        let store = self.store.read(cx);
+        match &store.cli_accounts {
             Some(Ok(accounts)) if !accounts.is_empty() => {
                 for account in accounts {
+                    let slot = account.slot;
                     list =
                         list.child(
                             h_flex()
@@ -484,6 +451,22 @@ impl UniApp {
                                                 .child(account.organization.clone()),
                                         ),
                                 )
+                                .when(!account.active, |row| {
+                                    row.child(
+                                        Button::new(SharedString::from(format!("cli-switch-{slot}")))
+                                            .small()
+                                            .ghost()
+                                            .label(t(if store.cli_switching == Some(slot) {
+                                                "account.switching"
+                                            } else {
+                                                "account.switch"
+                                            }))
+                                            .disabled(store.cli_switching.is_some())
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.store.update(cx, |store, cx| store.switch_cli(slot, cx));
+                                            })),
+                                    )
+                                })
                                 .when(account.active, |row| {
                                     row.child(Tag::secondary().small().rounded_full().child(
                                         h_flex().gap_1p5().child(dot(cx.theme().primary)).child(t("cli.active")),

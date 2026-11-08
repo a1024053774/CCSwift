@@ -220,6 +220,10 @@ fn on_tray(command: Command, cx: &mut App) {
             store.update(cx, |s, cx| s.update_or_check(cx));
         }
         // A menu item is easy to hit by mistake, and switching restarts Claude: the window asks first.
+        Command::SwitchCli(slot) => {
+            show_window(cx);
+            store.update(cx, |s, cx| s.switch_cli(slot, cx));
+        }
         Command::SwitchTo(account) => in_window(cx, move |view, window, cx| view.confirm_switch(account, window, cx)),
         Command::SwitchNext => in_window(cx, |view, window, cx| view.confirm_next(window, cx)),
         // The window explains first: Claude restarts signed out.

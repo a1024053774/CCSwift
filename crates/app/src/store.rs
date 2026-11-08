@@ -123,6 +123,9 @@ pub struct Store {
     pub overview: Option<Arc<Overview>>,
     pub snapshots: Vec<Manifest>,
     pub busy: Option<Busy>,
+    pub cli_accounts: Option<Result<Vec<cc_same_core::cli_accounts::Account>, String>>,
+    pub cli_switching: Option<u64>,
+    cli_loading: bool,
     /// The app opens (hidden) at login.
     pub open_at_login: bool,
     /// When the background switch was last turned on: the agent gets a moment to start.
@@ -154,6 +157,9 @@ impl Store {
             overview: None,
             snapshots: Vec::new(),
             busy: None,
+            cli_accounts: None,
+            cli_switching: None,
+            cli_loading: false,
             open_at_login: false,
             switched_on_at: None,
             updates: Updates::default(),
@@ -177,6 +183,7 @@ impl Store {
             let ctx = store.ctx.clone();
             cx.background_executor().spawn(async move { logins::recover_if_idle(&ctx) }).detach();
             store.refresh(cx);
+            store.refresh_cli(cx);
             store.watch_for_changes(cx);
             store.watch_for_updates(cx);
             store
@@ -224,6 +231,55 @@ impl Store {
     }
 
     // ------------------------------------------------------------------ reading
+
+    pub fn refresh_cli(&mut self, cx: &mut Context<Self>) {
+        if self.cli_loading || self.cli_switching.is_some() {
+            return;
+        }
+        self.cli_loading = true;
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async {
+                    std::env::var_os("HOME").ok_or_else(|| "HOME is not set".to_string()).and_then(|home| {
+                        cc_same_core::cli_accounts::list(std::path::Path::new(&home)).map_err(|e| format!("{e:#}"))
+                    })
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.cli_loading = false;
+                this.cli_accounts = Some(result);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn switch_cli(&mut self, slot: u64, cx: &mut Context<Self>) {
+        if self.cli_switching.is_some() || self.cli_loading {
+            return;
+        }
+        self.cli_switching = Some(slot);
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    std::env::var_os("HOME").ok_or_else(|| "HOME is not set".to_string()).and_then(|home| {
+                        cc_same_core::cli_accounts::switch(std::path::Path::new(&home), slot)
+                            .map_err(|e| format!("{e:#}"))
+                    })
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.cli_switching = None;
+                this.refresh_cli(cx);
+                cx.emit(StoreEvent::Done(result.map(|()| format!("CLI switched to account {slot}"))));
+                cx.notify();
+            });
+        })
+        .detach();
+    }
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         if self.refreshing {

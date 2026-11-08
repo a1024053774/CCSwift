@@ -35,8 +35,11 @@ comes as a small desktop app and a command-line tool. Both share one engine.
 This fork adds a **Desktop | CLI** selector. The CLI page reads claude-swap's
 account list in sequence order, showing slot, email, organization, and the active
 identity reported by `.claude.json`, as `cswap list` does. Select CLI again or
-press Cmd+R to reread it. Add accounts with `cswap add`; this page is read-only.
-It loads metadata in the background without Keychain or network access.
+press Cmd+R to reread it. On macOS, use Switch beside an account or choose it
+from the tray’s CLI submenu. Switching saves the outgoing credential before
+activating the selected login; Claude Desktop is unaffected. Add accounts with
+`cswap add`. Listing loads metadata in the background without Keychain or network
+access; switching also runs in the background.
 
 - **One glance.** Each account is a ring; rings that share every session overlap, and one that is
   behind drifts out until it catches up. One sentence says what is going on.

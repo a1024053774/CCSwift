@@ -18,6 +18,7 @@ pub enum Command {
     Update,
     /// Switch Claude to this account.
     SwitchTo(String),
+    SwitchCli(u64),
     /// Switch Claude to the next account in the list.
     SwitchNext,
     /// Restart Claude on its sign-in page, to sign in to another account.
@@ -57,6 +58,8 @@ pub struct Status {
     pub can_switch: bool,
     /// Every account CC Same knows: the list by number, then the others.
     pub accounts: Vec<TrayAccount>,
+    pub cli_accounts: Vec<cc_same_core::cli_accounts::Account>,
+    pub cli_idle: bool,
     /// "Next Account: bob@example.com", and whether there is one.
     pub next_label: String,
     pub has_next: bool,
@@ -102,6 +105,8 @@ impl Status {
             // first overview arrives, and the submenu is only ever added then.
             can_switch: cc_same_core::logins::supported(),
             accounts,
+            cli_accounts: store.cli_accounts.as_ref().and_then(|r| r.as_ref().ok()).cloned().unwrap_or_default(),
+            cli_idle: store.cli_switching.is_none(),
             next_label,
             has_next: next.is_some(),
             switch_label: t("tray.switch_account"),
@@ -201,6 +206,8 @@ mod platform {
         quit: MenuItem,
         /// "Switch Account", when switching is available.
         accounts: Option<Submenu>,
+        cli: Submenu,
+        cli_commands: Rc<RefCell<Vec<(MenuId, Command)>>>,
         /// What each item of the accounts menu does; they change with the accounts.
         account_commands: Rc<RefCell<Vec<(MenuId, Command)>>>,
         last: RefCell<Status>,
@@ -232,6 +239,25 @@ mod platform {
         *commands.borrow_mut() = found;
     }
 
+    fn fill_cli(menu: &Submenu, status: &Status, commands: &RefCell<Vec<(MenuId, Command)>>) {
+        while menu.remove_at(0).is_some() {}
+        let mut found = Vec::new();
+        for account in &status.cli_accounts {
+            let item = CheckMenuItem::new(
+                format!("{}  {}", account.slot, account.email),
+                !account.active && status.cli_idle,
+                account.active,
+                None,
+            );
+            let _ = menu.append(&item);
+            found.push((item.id().clone(), Command::SwitchCli(account.slot)));
+        }
+        if status.cli_accounts.is_empty() {
+            let _ = menu.append(&MenuItem::new("No CLI accounts — run cswap add", false, None));
+        }
+        *commands.borrow_mut() = found;
+    }
+
     impl Tray {
         pub fn new(status: &Status, on_command: OnCommand, cx: &mut App) -> anyhow::Result<Tray> {
             let title = MenuItem::new(&status.title, false, None);
@@ -249,11 +275,15 @@ mod platform {
                 fill_accounts(&menu, status, &account_commands);
                 menu
             });
+            let cli = Submenu::new("CLI", cfg!(target_os = "macos"));
+            let cli_commands = Rc::new(RefCell::new(Vec::new()));
+            fill_cli(&cli, status, &cli_commands);
             let menu = Menu::new();
             menu.append_items(&[&title, &detail, &PredefinedMenuItem::separator(), &sync, &background])?;
             if let Some(accounts) = &accounts {
                 menu.append(accounts)?;
             }
+            menu.append(&cli)?;
             menu.append_items(&[
                 &PredefinedMenuItem::separator(),
                 &open,
@@ -282,6 +312,7 @@ mod platform {
             ];
             let tray_id = icon.id().clone();
             let dynamic = account_commands.clone();
+            let cli_events = cli_commands.clone();
             let events = cx.spawn(async move |cx: &mut AsyncApp| {
                 loop {
                     let mut asked = Vec::new();
@@ -289,6 +320,9 @@ mod platform {
                         let known = commands.iter().find(|(id, _)| *id == event.id).map(|(_, c)| c.clone());
                         let known = known.or_else(|| {
                             dynamic.borrow().iter().find(|(id, _)| *id == event.id).map(|(_, c)| c.clone())
+                        });
+                        let known = known.or_else(|| {
+                            cli_events.borrow().iter().find(|(id, _)| *id == event.id).map(|(_, c)| c.clone())
                         });
                         asked.extend(known);
                     }
@@ -324,6 +358,8 @@ mod platform {
                 quit,
                 accounts,
                 account_commands,
+                cli,
+                cli_commands,
                 last: RefCell::new(status.clone()),
                 _events: events,
             })
@@ -353,6 +389,9 @@ mod platform {
                 if changed {
                     fill_accounts(accounts, status, &self.account_commands);
                 }
+            }
+            if last.cli_accounts != status.cli_accounts || last.cli_idle != status.cli_idle {
+                fill_cli(&self.cli, status, &self.cli_commands);
             }
             let _ = self.icon.set_tooltip(Some(status.tooltip()));
             if last.attention != status.attention

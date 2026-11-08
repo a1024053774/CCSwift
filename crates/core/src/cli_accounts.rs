@@ -1,10 +1,10 @@
-//! Read-only account metadata from claude-swap. Credentials are never needed for listing.
+//! Account metadata and switching using claude-swap’s existing store.
 
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::{fs, io::ErrorKind, path::Path};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Account {
     pub slot: u64,
     pub email: String,
@@ -112,3 +112,7 @@ mod tests {
         assert!(list(home.path()).is_err());
     }
 }
+
+#[path = "cli_accounts_switch.rs"]
+mod switching;
+pub use switching::switch;
