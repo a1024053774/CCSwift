@@ -4,7 +4,7 @@ title: End-to-end acceptance by computer use
 type: build
 status: open
 blocked_by: [T-008]
-claimed_by:
+claimed_by: Codex
 supersedes:
 ---
 
