@@ -13,7 +13,6 @@ use cc_same_core::report::Warning;
 use cc_same_core::retention::Limit;
 use cc_same_core::snapshot::Manifest;
 use gpui_kit::base::{Easing, Transition, transition};
-use gpui_kit::component::avatar::Avatar;
 use gpui_kit::component::button::{Button, ButtonVariant, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
@@ -33,7 +32,7 @@ use gpui_kit::{
     Anchor, Animation, AnimationExt as _, AnyElement, App, AppContext as _, Context, Div, ElementId, Entity,
     FocusHandle, FontWeight, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Render,
     SharedString, StatefulInteractiveElement as _, Styled as _, StyledText, Subscription, Window, actions, div,
-    ease_out_quint, linear_color_stop, linear_gradient, prelude::FluentBuilder as _, px, rems,
+    ease_out_quint, prelude::FluentBuilder as _, px, rems,
 };
 use std::rc::Rc;
 use std::time::Duration;
@@ -400,9 +399,42 @@ impl UniApp {
                 TabBar::new("account-pages")
                     .segmented()
                     .selected_index(self.page)
-                    .child(Tab::new().label(t("page.desktop")))
-                    .child(Tab::new().label(t("page.cli")))
-                    .child(Tab::new().label(t("page.usage")))
+                    .child(
+                        Tab::new().aria_label(t("page.desktop")).child(
+                            div()
+                                .border_b_1()
+                                .border_color(if self.page == 0 {
+                                    cx.theme().foreground
+                                } else {
+                                    gpui_kit::transparent_black()
+                                })
+                                .child(t("page.desktop")),
+                        ),
+                    )
+                    .child(
+                        Tab::new().aria_label(t("page.cli")).child(
+                            div()
+                                .border_b_1()
+                                .border_color(if self.page == 1 {
+                                    cx.theme().foreground
+                                } else {
+                                    gpui_kit::transparent_black()
+                                })
+                                .child(t("page.cli")),
+                        ),
+                    )
+                    .child(
+                        Tab::new().aria_label(t("page.usage")).child(
+                            div()
+                                .border_b_1()
+                                .border_color(if self.page == 2 {
+                                    cx.theme().foreground
+                                } else {
+                                    gpui_kit::transparent_black()
+                                })
+                                .child(t("page.usage")),
+                        ),
+                    )
                     .on_click(cx.listener(|this, index: &usize, _, cx| {
                         this.page = *index;
                         if this.page == 2 {
@@ -422,7 +454,7 @@ impl UniApp {
         use std::collections::BTreeMap;
         let store = self.store.read(cx);
         let muted = cx.theme().muted_foreground;
-        // One email row, showing the newest successful reading.
+        // One email row, preferring CLI readings with reset times.
         let mut rows: BTreeMap<String, (Option<Usage>, bool, bool)> = BTreeMap::new();
         for account in store.accounts() {
             let email = account.email.unwrap_or(account.name);
@@ -442,13 +474,10 @@ impl UniApp {
         for (email, (desktop, _, cli)) in rows {
             let reading = cli.then(|| store.cli_usage.readings.get(&email)).flatten();
             let cli_usage = reading.and_then(|r| r.usage);
-            let (source, usage) = if cli_usage.is_some_and(|u| desktop.is_none_or(|d| u.at > d.at)) {
-                (t("page.cli"), cli_usage)
-            } else {
-                (t("page.desktop"), desktop)
-            };
+            let (source, usage) =
+                if cli_usage.is_some() { (t("page.cli"), cli_usage) } else { (t("page.desktop"), desktop) };
             let detail = if let Some(usage) = usage {
-                format!("{source} · {}", crate::i18n::ago(usage.at))
+                format!("{source} · 更新于 {}", crate::i18n::ago(usage.at))
             } else {
                 reading
                     .and_then(|r| r.problem)
@@ -460,7 +489,7 @@ impl UniApp {
                 v_flex()
                     .gap_2()
                     .child(div().font_weight(FontWeight::MEDIUM).child(email.clone()))
-                    .child(usage_bars(&email, usage, cx))
+                    .child(usage_bars(&email, usage, reading.filter(|_| cli_usage.is_some()), cx))
                     .child(div().text_size(rems(0.846)).text_color(muted).child(detail)),
             );
         }
@@ -481,12 +510,6 @@ impl UniApp {
             )
             .when_some(store.usage_error.as_ref(), |el, error| el.child(div().text_color(muted).child(error.clone())))
             .child(list)
-            .child(
-                div()
-                    .text_size(rems(0.846))
-                    .text_color(muted)
-                    .child("CLI refreshes at most once a minute per account."),
-            )
             .into_any_element()
     }
 
@@ -798,7 +821,20 @@ impl UniApp {
                             }
                         }))
                         .when(a.excluded, |el| el.opacity(0.55))
-                        .child(Avatar::new().name(a.initials()).small())
+                        .child(
+                            div()
+                                .size(px(24.))
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded_full()
+                                .border_1()
+                                .border_color(theme.border)
+                                .text_color(theme.foreground)
+                                .text_size(rems(0.846))
+                                .child(a.initials()),
+                        )
                         .child(
                             v_flex()
                                 .flex_1()
@@ -1036,9 +1072,9 @@ impl Render for UniApp {
                 .child(v_flex().px_5().gap_5().children(notices).child(background).child(list))
                 .into_any_element()
         };
-        let (background_color, text_color, wash) = {
+        let (background_color, text_color) = {
             let theme = cx.theme();
-            (theme.background, theme.foreground, theme::wash(cx))
+            (theme.background, theme.foreground)
         };
         v_flex()
             .relative()
@@ -1059,12 +1095,6 @@ impl Render for UniApp {
             .size_full()
             .bg(background_color)
             .text_color(text_color)
-            // A warm light falls on the top of the window.
-            .child(div().absolute().top_0().left_0().right_0().h(px(300.)).bg(linear_gradient(
-                180.,
-                linear_color_stop(wash, 0.),
-                linear_color_stop(wash.opacity(0.), 1.),
-            )))
             .child(self.render_title_bar(cx))
             .child(self.render_pages(cx))
             .child(div().id("content").flex_1().min_h_0().overflow_y_scrollbar().child(content))
@@ -1253,25 +1283,44 @@ fn notice(
         .into_any_element()
 }
 
-fn usage_bars(id: &str, usage: Option<cc_same_core::usage::Usage>, _cx: &App) -> AnyElement {
+fn usage_bars(
+    id: &str,
+    usage: Option<cc_same_core::usage::Usage>,
+    reading: Option<&cc_same_core::cli_usage::Reading>,
+    cx: &App,
+) -> AnyElement {
     let mut bars = h_flex().gap_4();
-    for (label, value) in [("5h", usage.and_then(|u| u.five_hour)), ("7d", usage.and_then(|u| u.weekly))] {
+    for (index, (label, value)) in
+        [("5h", usage.and_then(|u| u.five_hour)), ("7d", usage.and_then(|u| u.weekly))].into_iter().enumerate()
+    {
         let text = value.map(|v| format!("{v:.0}%")).unwrap_or_else(|| "—".into());
         bars = bars.child(
-            h_flex()
+            v_flex()
                 .flex_1()
                 .min_w_0()
-                .gap_2()
-                .child(div().text_size(rems(0.846)).child(label))
+                .gap_1()
                 .child(
-                    div().flex_1().child(
-                        Progress::new(SharedString::from(format!("{id}-{label}")))
-                            .xsmall()
-                            .accessibility_label(format!("{id} {label}: {text}"))
-                            .value(value.unwrap_or(0.).clamp(0., 100.) as f32),
-                    ),
+                    h_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .gap_2()
+                        .child(div().text_size(rems(0.846)).child(label))
+                        .child(
+                            div().flex_1().child(
+                                Progress::new(SharedString::from(format!("{id}-{label}")))
+                                    .xsmall()
+                                    .accessibility_label(format!("{id} {label}: {text}"))
+                                    .value(value.unwrap_or(0.).clamp(0., 100.) as f32),
+                            ),
+                        )
+                        .child(div().w(px(32.)).text_size(rems(0.846)).child(text)),
                 )
-                .child(div().w(px(32.)).text_size(rems(0.846)).child(text)),
+                .child(
+                    div()
+                        .text_size(rems(0.846))
+                        .text_color(cx.theme().muted_foreground)
+                        .child(reading.map(|r| r.reset_label(index)).unwrap_or_else(|| "—".into())),
+                ),
         );
     }
     bars.into_any_element()

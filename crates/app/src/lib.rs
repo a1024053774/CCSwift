@@ -28,8 +28,8 @@ use gpui_kit::{
 use std::rc::Rc;
 use std::sync::Arc;
 
-pub const APP_ID: &str = "io.github.songkeys.cc-same";
-pub const APP_NAME: &str = "CC Same";
+pub const APP_ID: &str = "io.github.a1024053774.cc-same-plus";
+pub const APP_NAME: &str = "CC Same Plus";
 
 actions!(cc_same_app, [Quit, CloseWindow]);
 

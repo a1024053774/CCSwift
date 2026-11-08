@@ -2,7 +2,9 @@
   <img src="assets/icon.png" width="112" alt="">
 </p>
 
-<h1 align="center">CC Same</h1>
+<h1 align="center">CC Same Plus</h1>
+
+CC Same Plus extends [songkeys/cc-same](https://github.com/songkeys/cc-same) with a separate Claude Code account switcher and a unified usage view, using the account store and CLI behavior of [realiti4/claude-swap](https://github.com/realiti4/claude-swap). Desktop session sync and saved logins stay shared with CC Same.
 
 <p align="center">
   <a href="https://github.com/songkeys/cc-same/actions/workflows/ci.yml"><img src="https://github.com/songkeys/cc-same/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -42,7 +44,7 @@ activating the selected login; Claude Desktop is unaffected. Add accounts with
 access; switching also runs in the background.
 
 The Usage page joins accounts by email in compact rows with 5-hour and weekly
-bars side by side. Each row shows the newer reading and its source and age. Desktop usage comes from
+bars side by side. Each row prefers a successful CLI reading and shows its source, age, and reset times; Desktop-only reset times are unknown (—). Desktop usage comes from
 its local history. Opening Usage or pressing Refresh (Cmd+R) reads CLI usage
 from the OAuth endpoint, at most once a minute per email while the app runs.
 The active CLI slot uses its live Keychain credential; other slots use their backups.

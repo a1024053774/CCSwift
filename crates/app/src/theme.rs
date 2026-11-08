@@ -1,4 +1,4 @@
-//! CC Same's look: a warm light and dark theme for GPUI Kit (`assets/theme.json`), and the
+//! CC Same's look: a monochrome light and dark theme for GPUI Kit (`assets/theme.json`), and the
 //! few product colors the rings in the headline need, derived from the theme's semantic tokens.
 
 use gpui_kit::component::{ActiveTheme as _, Theme, ThemeMode, ThemeSet};
@@ -106,18 +106,12 @@ impl RingColors {
             stroke: theme.foreground.opacity(if dark { 0.24 } else { 0.18 }),
             stroke_hover: theme.foreground.opacity(if dark { 0.55 } else { 0.45 }),
             fill: theme.primary.opacity(if dark { 0.15 } else { 0.18 }),
-            open: theme.primary.opacity(if dark { 0.8 } else { 0.7 }),
+            open: theme.foreground,
             label: theme.muted_foreground,
             danger: theme.danger,
             grid: theme.foreground.opacity(if dark { 0.22 } else { 0.18 }),
         }
     }
-}
-
-/// The warm light at the top of the window.
-pub fn wash(cx: &App) -> Hsla {
-    let theme = cx.theme();
-    theme.primary.opacity(if theme.is_dark() { 0.09 } else { 0.065 })
 }
 
 /// The soft lift under a card: a contact shadow and a wide, faint one. Dark surfaces get

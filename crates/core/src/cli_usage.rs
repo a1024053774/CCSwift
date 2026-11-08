@@ -22,11 +22,26 @@ impl Problem {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Reading {
+    pub resets_at: [Option<String>; 2],
     pub usage: Option<Usage>,
     pub problem: Option<Problem>,
     attempted: Option<Instant>,
+}
+
+impl Reading {
+    pub fn reset_label(&self, window: usize) -> String {
+        self.resets_at[window]
+            .as_deref()
+            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+            .map(|at| {
+                at.with_timezone(&chrono::Local)
+                    .format(if window == 0 { "%H:%M 重置" } else { "%m月%d日 %H:%M 重置" })
+                    .to_string()
+            })
+            .unwrap_or_else(|| "—".into())
+    }
 }
 
 /// Lives with the app store, so reopening the window does not reset the throttle.
@@ -40,7 +55,7 @@ impl Cache {
         self.refresh_with(accounts, fetch);
     }
 
-    fn refresh_with(&mut self, accounts: &[Account], mut fetch: impl FnMut(&Account) -> Result<Usage, Problem>) {
+    fn refresh_with(&mut self, accounts: &[Account], mut fetch: impl FnMut(&Account) -> Result<Reading, Problem>) {
         for account in accounts {
             let entry = self.readings.entry(account.email.clone()).or_default();
             if entry.attempted.is_some_and(|at| at.elapsed() < Duration::from_secs(60)) {
@@ -48,8 +63,9 @@ impl Cache {
             }
             entry.attempted = Some(Instant::now());
             match fetch(account) {
-                Ok(usage) => {
-                    entry.usage = Some(usage);
+                Ok(reading) => {
+                    entry.usage = reading.usage;
+                    entry.resets_at = reading.resets_at;
                     entry.problem = None;
                 }
                 Err(problem) => entry.problem = Some(problem),
@@ -58,11 +74,16 @@ impl Cache {
     }
 }
 
-fn fetch(account: &Account) -> Result<Usage, Problem> {
+fn fetch(account: &Account) -> Result<Reading, Problem> {
     let mut command = Command::new("/usr/bin/security");
     command.arg("find-generic-password");
     if account.active {
-        command.args(["-s", "Claude Code-credentials"]);
+        let user = Command::new("/usr/bin/id").arg("-un").output().map_err(|_| Problem::Unavailable)?;
+        if !user.status.success() {
+            return Err(Problem::Unavailable);
+        }
+        let user = std::str::from_utf8(&user.stdout).map_err(|_| Problem::Unavailable)?.trim();
+        command.args(["-s", "Claude Code-credentials", "-a", user]);
     } else {
         command.args(["-s", "claude-swap", "-a", &format!("account-{}-{}", account.slot, account.email)]);
     }
@@ -99,7 +120,7 @@ fn fetch(account: &Account) -> Result<Usage, Problem> {
     parse(&bytes, fsx::now_secs())
 }
 
-fn parse(bytes: &[u8], at: f64) -> Result<Usage, Problem> {
+fn parse(bytes: &[u8], at: f64) -> Result<Reading, Problem> {
     let data: Value = serde_json::from_slice(bytes).map_err(|_| Problem::Unavailable)?;
     if !data.is_object() || (data.get("five_hour").is_none() && data.get("seven_day").is_none()) {
         return Err(Problem::Unavailable);
@@ -115,7 +136,11 @@ fn parse(bytes: &[u8], at: f64) -> Result<Usage, Problem> {
         }
         percent.as_f64().filter(|n| n.is_finite() && *n >= 0.0).map(Some).ok_or(Problem::Unavailable)
     };
-    Ok(Usage { at, five_hour: window("five_hour")?, weekly: window("seven_day")? })
+    Ok(Reading {
+        usage: Some(Usage { at, five_hour: window("five_hour")?, weekly: window("seven_day")? }),
+        resets_at: ["five_hour", "seven_day"].map(|key| data[key]["resets_at"].as_str().map(str::to_owned)),
+        ..Reading::default()
+    })
 }
 
 #[cfg(test)]
@@ -134,7 +159,10 @@ mod tests {
         let mut calls = 0;
         cache.refresh_with(&accounts, |_| {
             calls += 1;
-            Ok(Usage { at: 100.0, five_hour: Some(12.0), weekly: Some(34.0) })
+            Ok(Reading {
+                usage: Some(Usage { at: 100.0, five_hour: Some(12.0), weekly: Some(34.0) }),
+                ..Reading::default()
+            })
         });
         cache.refresh_with(&accounts, |_| {
             calls += 1;
@@ -157,11 +185,30 @@ mod tests {
         assert_eq!(entry.problem, Some(Problem::Unavailable));
     }
 
+    // Reset fields can be dropped, swapped, null, or malformed. Unknown resets must
+    // remain unknown without losing an otherwise valid percentage reading.
+    #[test]
+    fn retains_window_resets() {
+        let reading = parse(br#"{"five_hour":{"utilization":12,"resets_at":"2026-11-08T23:00:00Z"},"seven_day":{"utilization":73,"resets_at":"2026-11-12T04:00:00Z"}}"#, 123.).unwrap();
+        assert_eq!(reading.resets_at, [Some("2026-11-08T23:00:00Z".into()), Some("2026-11-12T04:00:00Z".into())]);
+        let unknown = parse(
+            br#"{"five_hour":{"utilization":0,"resets_at":null},"seven_day":{"utilization":73,"resets_at":"invalid"}}"#,
+            123.,
+        )
+        .unwrap();
+        assert_eq!(unknown.reset_label(0), "—");
+        assert_eq!(unknown.reset_label(1), "—");
+        assert_eq!(unknown.usage.unwrap().weekly, Some(73.));
+    }
+
     #[test]
     fn response_percentages_and_nullable_windows() {
         let result = parse(br#"{"five_hour":{"utilization":12.5},"seven_day":{"utilization":64}}"#, 123.).unwrap();
-        assert_eq!(result, Usage { at: 123., five_hour: Some(12.5), weekly: Some(64.) });
-        assert_eq!(parse(br#"{"five_hour":{"utilization":null},"seven_day":null}"#, 1.).unwrap().five_hour, None);
+        assert_eq!(result.usage.unwrap(), Usage { at: 123., five_hour: Some(12.5), weekly: Some(64.) });
+        assert_eq!(
+            parse(br#"{"five_hour":{"utilization":null},"seven_day":null}"#, 1.).unwrap().usage.unwrap().five_hour,
+            None
+        );
         for body in [
             r#"{"error":"unauthorized"}"#,
             r#"{"five_hour":{}}"#,
