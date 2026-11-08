@@ -126,6 +126,9 @@ pub struct Store {
     pub cli_accounts: Option<Result<Vec<cc_same_core::cli_accounts::Account>, String>>,
     pub cli_switching: Option<u64>,
     cli_loading: bool,
+    pub cli_usage: cc_same_core::cli_usage::Cache,
+    pub usage_loading: bool,
+    pub usage_error: Option<String>,
     /// The app opens (hidden) at login.
     pub open_at_login: bool,
     /// When the background switch was last turned on: the agent gets a moment to start.
@@ -160,6 +163,9 @@ impl Store {
             cli_accounts: None,
             cli_switching: None,
             cli_loading: false,
+            cli_usage: Default::default(),
+            usage_loading: false,
+            usage_error: None,
             open_at_login: false,
             switched_on_at: None,
             updates: Updates::default(),
@@ -249,6 +255,39 @@ impl Store {
             let _ = this.update(cx, |this, cx| {
                 this.cli_loading = false;
                 this.cli_accounts = Some(result);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn refresh_usage(&mut self, cx: &mut Context<Self>) {
+        if self.usage_loading {
+            return;
+        }
+        self.usage_loading = true;
+        self.refresh(cx);
+        let mut cache = self.cli_usage.clone();
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let (cache, accounts) = cx
+                .background_executor()
+                .spawn(async move {
+                    let accounts =
+                        std::env::var_os("HOME").ok_or_else(|| "HOME is not set".to_string()).and_then(|home| {
+                            cc_same_core::cli_accounts::list(std::path::Path::new(&home)).map_err(|e| format!("{e:#}"))
+                        });
+                    if let Ok(accounts) = &accounts {
+                        cache.refresh(accounts);
+                    }
+                    (cache, accounts)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.cli_usage = cache;
+                this.usage_error = accounts.as_ref().err().cloned();
+                this.cli_accounts = Some(accounts);
+                this.usage_loading = false;
                 cx.notify();
             });
         })

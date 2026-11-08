@@ -46,3 +46,6 @@ pub use model::*;
 pub use paths::Paths;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[cfg(feature = "cli-usage")]
+pub mod cli_usage;

@@ -45,7 +45,7 @@ actions!(cc_same, [Refresh, SyncNow, OpenSettings]);
 
 pub struct UniApp {
     store: Entity<Store>,
-    cli_page: bool,
+    page: usize,
     /// The account under the pointer, in the list or in the picture.
     hovered: Option<SharedString>,
     /// False until the first frame with data has been drawn, so the rings fly in and the
@@ -67,19 +67,12 @@ impl UniApp {
         ];
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
-        UniApp { store, cli_page: false, hovered: None, gathered: false, focus, _subscriptions: subscriptions }
+        UniApp { store, page: 0, hovered: None, gathered: false, focus, _subscriptions: subscriptions }
     }
 
     /// A still picture (screenshots): everything already in place.
     pub fn still(store: Entity<Store>, cx: &mut Context<Self>) -> UniApp {
-        UniApp {
-            store,
-            cli_page: false,
-            hovered: None,
-            gathered: true,
-            focus: cx.focus_handle(),
-            _subscriptions: Vec::new(),
-        }
+        UniApp { store, page: 0, hovered: None, gathered: true, focus: cx.focus_handle(), _subscriptions: Vec::new() }
     }
 
     pub fn store(&self) -> &Entity<Store> {
@@ -409,16 +402,84 @@ impl UniApp {
             .child(
                 TabBar::new("account-pages")
                     .segmented()
-                    .selected_index(usize::from(self.cli_page))
+                    .selected_index(self.page)
                     .child(Tab::new().label("Desktop"))
                     .child(Tab::new().label("CLI"))
+                    .child(Tab::new().label("Usage"))
                     .on_click(cx.listener(|this, index: &usize, _, cx| {
-                        this.cli_page = *index == 1;
-                        if this.cli_page {
+                        this.page = *index;
+                        if this.page == 2 {
+                            this.store.update(cx, |s, cx| s.refresh_usage(cx));
+                        }
+                        if this.page == 1 {
                             this.refresh_cli(cx);
                         }
                         cx.notify();
                     })),
+            )
+            .into_any_element()
+    }
+
+    fn render_usage(&self, cx: &Context<Self>) -> AnyElement {
+        use cc_same_core::usage::Usage;
+        use std::collections::BTreeMap;
+        let store = self.store.read(cx);
+        let muted = cx.theme().muted_foreground;
+        // One email row, with independent source timestamps and numbers.
+        let mut rows: BTreeMap<String, (Option<Usage>, bool, bool)> = BTreeMap::new();
+        for account in store.accounts() {
+            let email = account.email.unwrap_or(account.name);
+            let usage = store.overview.as_ref().and_then(|o| o.usage.get(&account.id)).copied();
+            let row = rows.entry(email).or_default();
+            row.1 = true;
+            if usage.is_some_and(|u| row.0.is_none_or(|old| u.at > old.at)) {
+                row.0 = usage;
+            }
+        }
+        if let Some(Ok(accounts)) = &store.cli_accounts {
+            for account in accounts {
+                rows.entry(account.email.clone()).or_default().2 = true;
+            }
+        }
+        let mut list = surface(cx).p_3().gap_4();
+        for (email, (desktop, has_desktop, cli)) in rows {
+            let mut row = v_flex().gap_2().child(div().font_weight(FontWeight::MEDIUM).child(email.clone()));
+            if has_desktop {
+                row = row.child(usage_source(&format!("desktop-{email}"), "Desktop", desktop, None, cx));
+            }
+            if cli {
+                let reading = store.cli_usage.readings.get(&email);
+                let status = reading
+                    .and_then(|r| r.problem)
+                    .map(|p| p.message())
+                    .or_else(|| (store.usage_loading && reading.is_none()).then_some("loading…"));
+                row =
+                    row.child(usage_source(&format!("cli-{email}"), "CLI", reading.and_then(|r| r.usage), status, cx));
+            }
+            list = list.child(row);
+        }
+        v_flex()
+            .p_5()
+            .gap_3()
+            .child(
+                h_flex().justify_between().child(section_label("Usage".into(), cx)).child(
+                    Button::new("refresh-usage")
+                        .small()
+                        .outline()
+                        .label(if store.usage_loading { "Refreshing…" } else { "Refresh" })
+                        .disabled(store.usage_loading)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.store.update(cx, |s, cx| s.refresh_usage(cx));
+                        })),
+                ),
+            )
+            .when_some(store.usage_error.as_ref(), |el, error| el.child(div().text_color(muted).child(error.clone())))
+            .child(list)
+            .child(
+                div()
+                    .text_size(rems(0.846))
+                    .text_color(muted)
+                    .child("CLI refreshes at most once a minute per account."),
             )
             .into_any_element()
     }
@@ -1035,7 +1096,9 @@ impl Render for UniApp {
                 cx.notify();
             });
         }
-        let content = if self.cli_page {
+        let content = if self.page == 2 {
+            self.render_usage(cx)
+        } else if self.page == 1 {
             self.render_cli(cx)
         } else {
             let headline = self.render_headline(mood, &accounts, window, cx);
@@ -1057,7 +1120,9 @@ impl Render for UniApp {
             .key_context("UniApp")
             .track_focus(&self.focus)
             .on_action(cx.listener(|this, _: &Refresh, _, cx| {
-                if this.cli_page {
+                if this.page == 2 {
+                    this.store.update(cx, |s, cx| s.refresh_usage(cx));
+                } else if this.page == 1 {
                     this.refresh_cli(cx);
                 } else {
                     this.store.update(cx, |s, cx| s.refresh(cx));
@@ -1300,4 +1365,41 @@ pub fn open_notes(title: String, notes: String, window: &mut Window, cx: &mut Ap
                 .selectable(true),
         )
     });
+}
+
+fn usage_source(
+    id: &str,
+    source: &str,
+    usage: Option<cc_same_core::usage::Usage>,
+    status: Option<&str>,
+    cx: &App,
+) -> AnyElement {
+    let age = usage.map(|u| crate::i18n::ago(u.at));
+    let detail = match (age, status) {
+        (Some(age), Some(status)) => format!("{source} · {age} · {status}"),
+        (Some(age), None) => format!("{source} · {age}"),
+        (None, status) => format!("{source} · {}", status.unwrap_or("unavailable")),
+    };
+    let mut view =
+        v_flex().gap_1().child(div().text_size(rems(0.846)).text_color(cx.theme().muted_foreground).child(detail));
+    for (key, label, value) in
+        [("5h", "5-hour", usage.and_then(|u| u.five_hour)), ("7d", "Weekly", usage.and_then(|u| u.weekly))]
+    {
+        let text = value.map(|v| format!("{v:.0}%")).unwrap_or_else(|| "—".into());
+        view = view.child(
+            h_flex()
+                .gap_2()
+                .child(div().w(px(48.)).text_size(rems(0.846)).child(label))
+                .child(
+                    div().flex_1().child(
+                        Progress::new(SharedString::from(format!("{id}-{key}")))
+                            .xsmall()
+                            .accessibility_label(format!("{source} {label}: {text}"))
+                            .value(value.unwrap_or(0.).clamp(0., 100.) as f32),
+                    ),
+                )
+                .child(div().w(px(36.)).text_size(rems(0.846)).child(text)),
+        );
+    }
+    view.into_any_element()
 }

@@ -32,5 +32,5 @@ One macOS app (this fork of CC Same) switches **Desktop** accounts (existing cc-
 
 | Doc | Covers | Verified |
 | --- | --- | --- |
-| [README.md](../README.md) | `crates/app/src/**`, `crates/core/src/cli_accounts*.rs` | 96d6cee |
+| [README.md](../README.md) | `crates/app/src/**`, `crates/core/src/cli_accounts*.rs`, `crates/core/src/cli_usage.rs` | 96d6cee |
 | [CONTEXT.md](../CONTEXT.md) | `crates/core/src/**` | |

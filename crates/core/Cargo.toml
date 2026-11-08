@@ -8,7 +8,13 @@ repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
 
+[features]
+cli-usage = ["dep:reqwest", "dep:rustls"]
+
 [dependencies]
+# Reuse the app HTTP stack; CLI-only builds do not pull it in.
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["blocking", "rustls-no-provider", "system-proxy"] }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["ring", "std", "tls12"] }
 anyhow.workspace = true
 chrono.workspace = true
 dirs.workspace = true

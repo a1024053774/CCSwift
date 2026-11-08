@@ -32,7 +32,7 @@ comes as a small desktop app and a command-line tool. Both share one engine.
 
 ## The app
 
-This fork adds a **Desktop | CLI** selector. The CLI page reads claude-swap's
+This fork adds a **Desktop | CLI | Usage** selector. The CLI page reads claude-swap's
 account list in sequence order, showing slot, email, organization, and the active
 identity reported by `.claude.json`, as `cswap list` does. Select CLI again or
 press Cmd+R to reread it. On macOS, use Switch beside an account or choose it
@@ -40,6 +40,14 @@ from the tray’s CLI submenu. Switching saves the outgoing credential before
 activating the selected login; Claude Desktop is unaffected. Add accounts with
 `cswap add`. Listing loads metadata in the background without Keychain or network
 access; switching also runs in the background.
+
+The Usage page joins accounts by email, with separate Desktop and CLI readings,
+5-hour and weekly bars, and the age of each reading. Desktop usage comes from
+its local history. Opening Usage or pressing Refresh (Cmd+R) reads CLI usage
+from the OAuth endpoint, at most once a minute per email while the app runs.
+Keychain and network work run in the background. Failed requests keep the last
+reading in memory, or show unavailable; expired credentials show “needs cswap
+refresh”. This view never refreshes tokens or writes account stores.
 
 - **One glance.** Each account is a ring; rings that share every session overlap, and one that is
   behind drifts out until it catches up. One sentence says what is going on.
