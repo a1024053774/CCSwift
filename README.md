@@ -32,6 +32,12 @@ comes as a small desktop app and a command-line tool. Both share one engine.
 
 ## The app
 
+This fork adds a **Desktop | CLI** selector. The CLI page reads claude-swap's
+account list in sequence order, showing slot, email, organization, and the active
+identity reported by `.claude.json`, as `cswap list` does. Select CLI again or
+press Cmd+R to reread it. Add accounts with `cswap add`; this page is read-only.
+It loads metadata in the background without Keychain or network access.
+
 - **One glance.** Each account is a ring; rings that share every session overlap, and one that is
   behind drifts out until it catches up. One sentence says what is going on.
 - **One switch.** *Sync in the background* keeps every account identical from login, even with the

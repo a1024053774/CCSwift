@@ -20,6 +20,7 @@
 
 pub mod accounts;
 pub mod apply;
+pub mod cli_accounts;
 pub mod config;
 pub mod desktop;
 pub mod fsx;

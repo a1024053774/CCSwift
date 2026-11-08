@@ -24,6 +24,7 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::skeleton::Skeleton;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::switch::Switch;
+use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::tag::Tag;
 use gpui_kit::component::text::{TextView, TextViewStyle};
 use gpui_kit::component::tooltip::Tooltip;
@@ -44,6 +45,9 @@ actions!(cc_same, [Refresh, SyncNow, OpenSettings]);
 
 pub struct UniApp {
     store: Entity<Store>,
+    cli_page: bool,
+    cli_accounts: Option<Result<Vec<cc_same_core::cli_accounts::Account>, String>>,
+    cli_loading: bool,
     /// The account under the pointer, in the list or in the picture.
     hovered: Option<SharedString>,
     /// False until the first frame with data has been drawn, so the rings fly in and the
@@ -65,12 +69,30 @@ impl UniApp {
         ];
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
-        UniApp { store, hovered: None, gathered: false, focus, _subscriptions: subscriptions }
+        UniApp {
+            store,
+            cli_page: false,
+            cli_accounts: None,
+            cli_loading: false,
+            hovered: None,
+            gathered: false,
+            focus,
+            _subscriptions: subscriptions,
+        }
     }
 
     /// A still picture (screenshots): everything already in place.
     pub fn still(store: Entity<Store>, cx: &mut Context<Self>) -> UniApp {
-        UniApp { store, hovered: None, gathered: true, focus: cx.focus_handle(), _subscriptions: Vec::new() }
+        UniApp {
+            store,
+            cli_page: false,
+            cli_accounts: None,
+            cli_loading: false,
+            hovered: None,
+            gathered: true,
+            focus: cx.focus_handle(),
+            _subscriptions: Vec::new(),
+        }
     }
 
     pub fn store(&self) -> &Entity<Store> {
@@ -78,6 +100,32 @@ impl UniApp {
     }
 
     // ------------------------------------------------------------------ actions
+
+    fn refresh_cli(&mut self, cx: &mut Context<Self>) {
+        if self.cli_loading {
+            return;
+        }
+        self.cli_loading = true;
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async {
+                    std::env::var_os("HOME")
+                        .ok_or_else(|| "Cannot locate the CLI account store: HOME is not set".to_string())
+                        .and_then(|home| {
+                            cc_same_core::cli_accounts::list(std::path::Path::new(&home))
+                                .map_err(|error| format!("{error:#}"))
+                        })
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.cli_loading = false;
+                this.cli_accounts = Some(result);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
 
     fn sync_now(&mut self, cx: &mut Context<Self>) {
         self.store.update(cx, |store, cx| store.sync_now(cx));
@@ -387,6 +435,74 @@ impl UniApp {
     }
 
     // ------------------------------------------------------------------ rendering
+
+    fn render_pages(&self, cx: &mut Context<Self>) -> AnyElement {
+        h_flex()
+            .justify_center()
+            .px_5()
+            .pb_2()
+            .child(
+                TabBar::new("account-pages")
+                    .segmented()
+                    .selected_index(usize::from(self.cli_page))
+                    .child(Tab::new().label("Desktop"))
+                    .child(Tab::new().label("CLI"))
+                    .on_click(cx.listener(|this, index: &usize, _, cx| {
+                        this.cli_page = *index == 1;
+                        if this.cli_page {
+                            this.refresh_cli(cx);
+                        }
+                        cx.notify();
+                    })),
+            )
+            .into_any_element()
+    }
+
+    fn render_cli(&self, cx: &Context<Self>) -> AnyElement {
+        let muted = cx.theme().muted_foreground;
+        let mut list = surface(cx).p_1().gap_px();
+        match &self.cli_accounts {
+            Some(Ok(accounts)) if !accounts.is_empty() => {
+                for account in accounts {
+                    list =
+                        list.child(
+                            h_flex()
+                                .px_3()
+                                .py_3()
+                                .gap_3()
+                                .child(div().text_color(muted).child(account.slot.to_string()))
+                                .child(
+                                    v_flex()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .gap_1()
+                                        .child(div().font_weight(FontWeight::MEDIUM).child(account.email.clone()))
+                                        .child(
+                                            div()
+                                                .text_size(rems(0.846))
+                                                .text_color(muted)
+                                                .child(account.organization.clone()),
+                                        ),
+                                )
+                                .when(account.active, |row| {
+                                    row.child(Tag::secondary().small().rounded_full().child(
+                                        h_flex().gap_1p5().child(dot(cx.theme().primary)).child(t("cli.active")),
+                                    ))
+                                }),
+                        );
+                }
+            }
+            result => {
+                let message = match result {
+                    None => t("cli.loading"),
+                    Some(Ok(_)) => t("cli.empty"),
+                    Some(Err(error)) => error.clone(),
+                };
+                list = list.child(div().px_3().py_3().text_color(muted).child(message));
+            }
+        }
+        v_flex().p_5().gap_2().child(section_label(t("cli.title"), cx)).child(list).into_any_element()
+    }
 
     fn render_title_bar(&self, cx: &mut Context<Self>) -> AnyElement {
         TitleBar::new()
@@ -936,10 +1052,19 @@ impl Render for UniApp {
                 cx.notify();
             });
         }
-        let headline = self.render_headline(mood, &accounts, window, cx);
-        let background = self.render_background(cx);
-        let list = self.render_accounts(&accounts, cx);
-        let notices = self.render_notices(&accounts, cx);
+        let content = if self.cli_page {
+            self.render_cli(cx)
+        } else {
+            let headline = self.render_headline(mood, &accounts, window, cx);
+            let background = self.render_background(cx);
+            let list = self.render_accounts(&accounts, cx);
+            let notices = self.render_notices(&accounts, cx);
+            v_flex()
+                .pb_6()
+                .child(headline)
+                .child(v_flex().px_5().gap_5().children(notices).child(background).child(list))
+                .into_any_element()
+        };
         let (background_color, text_color, wash) = {
             let theme = cx.theme();
             (theme.background, theme.foreground, theme::wash(cx))
@@ -948,7 +1073,13 @@ impl Render for UniApp {
             .relative()
             .key_context("UniApp")
             .track_focus(&self.focus)
-            .on_action(cx.listener(|this, _: &Refresh, _, cx| this.store.update(cx, |s, cx| s.refresh(cx))))
+            .on_action(cx.listener(|this, _: &Refresh, _, cx| {
+                if this.cli_page {
+                    this.refresh_cli(cx);
+                } else {
+                    this.store.update(cx, |s, cx| s.refresh(cx));
+                }
+            }))
             .on_action(cx.listener(|this, _: &SyncNow, _, cx| this.sync_now(cx)))
             .on_action(cx.listener(|this, _: &OpenSettings, window, cx| this.open_settings(window, cx)))
             .on_action(cx.listener(|_, _: &crate::CloseWindow, window, _| window.remove_window()))
@@ -962,14 +1093,8 @@ impl Render for UniApp {
                 linear_color_stop(wash.opacity(0.), 1.),
             )))
             .child(self.render_title_bar(cx))
-            .child(
-                div().id("content").flex_1().min_h_0().overflow_y_scrollbar().child(
-                    v_flex()
-                        .pb_6()
-                        .child(headline)
-                        .child(v_flex().px_5().gap_5().children(notices).child(background).child(list)),
-                ),
-            )
+            .child(self.render_pages(cx))
+            .child(div().id("content").flex_1().min_h_0().overflow_y_scrollbar().child(content))
     }
 }
 

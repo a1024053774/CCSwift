@@ -2,6 +2,19 @@
 # CLDR form: .one/.other, .one/.few/.many (ru), .other only (zh, ja, ko).
 _version: 2
 
+"cli.title":
+  en: "CLI accounts"
+  zh-CN: "CLI 账号"
+"cli.active":
+  en: "Active"
+  zh-CN: "正在使用"
+"cli.loading":
+  en: "Reading CLI accounts…"
+  zh-CN: "正在读取 CLI 账号…"
+"cli.empty":
+  en: "Run `cswap add` to add a CLI account."
+  zh-CN: "运行 `cswap add` 添加 CLI 账号。"
+
 "headline.loading":
   en: "Reading your accounts…"
   zh-CN: "正在读取你的账号…"
