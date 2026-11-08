@@ -20,9 +20,8 @@ fn main() -> anyhow::Result<()> {
 mod mac {
     use cc_same_app::i18n;
     use cc_same_app::model::Busy;
-    use cc_same_app::store::{SigningIn, Store, UpdatePhase, Updates, Waiting};
+    use cc_same_app::store::{SigningIn, Store, Waiting};
     use cc_same_app::theme::{self, ThemeChoice};
-    use cc_same_app::update::{self, Asset, Problem, Release};
     use cc_same_app::view::UniApp;
     use cc_same_core::accounts::{Roster, Slot};
     use cc_same_core::config::{LastSync, PendingRestart};
@@ -39,7 +38,6 @@ mod mac {
     use std::fs;
     use std::path::PathBuf;
     use std::sync::Arc;
-    use std::sync::atomic::AtomicU64;
     use std::time::Duration;
 
     const ADA: (&str, &str) = ("5a1d3c07-8f2e-4b6a-9c1d-2e3f4a5b6c7d", "0f1e2d3c-4b5a-4968-8776-655443322110");
@@ -54,9 +52,6 @@ mod mac {
         None,
         Settings,
         ConfirmRestore,
-        Notes,
-        /// Settings, with the answer to "Check now" on top.
-        SettingsToast,
         /// About to restart Claude to sign in to another account.
         SignIn,
         /// Asked from the menu bar: switch Claude to Grace?
@@ -91,24 +86,12 @@ mod mac {
         AfterWork,
     }
 
-    /// Where an update stands in a scene.
-    #[derive(Clone, Copy)]
-    enum Update {
-        None,
-        Available,
-        Downloading,
-        Ready,
-        Failed,
-        Updated,
-    }
-
     struct Scene {
         name: &'static str,
         theme: ThemeChoice,
         language: &'static str,
         overlay: Overlay,
         busy: Option<Busy>,
-        update: Update,
         switching: Switching,
         /// Tall enough to show the whole settings sheet.
         tall: bool,
@@ -122,7 +105,6 @@ mod mac {
             language: "en",
             overlay: Overlay::None,
             busy: None,
-            update: Update::None,
             switching: Switching::Idle,
             tall: false,
             build,
@@ -165,13 +147,6 @@ mod mac {
             Scene { language: "pt-BR", ..scene("pt-BR-linked-light", Light, linked) },
             Scene { language: "ru", ..scene("ru-restart-light", Light, restart) },
             Scene { language: "zh-TW", overlay: Overlay::ConfirmRestore, ..scene("zh-TW-confirm-light", Light, quit) },
-            Scene { update: Update::Available, ..scene("update-available-light", Light, in_sync) },
-            Scene { update: Update::Downloading, ..scene("update-downloading-dark", Dark, in_sync) },
-            Scene { update: Update::Ready, ..scene("update-ready-light", Light, in_sync) },
-            Scene { update: Update::Failed, ..scene("update-failed-light", Light, in_sync) },
-            Scene { update: Update::Updated, ..scene("update-done-dark", Dark, in_sync) },
-            Scene { update: Update::Available, overlay: Overlay::Notes, ..scene("update-notes-light", Light, in_sync) },
-            Scene { overlay: Overlay::SettingsToast, ..scene("toast-settings-dark", Dark, in_sync) },
             Scene {
                 busy: Some(Busy::Switching),
                 switching: Switching::ToGrace,
@@ -240,25 +215,6 @@ mod mac {
                 switching: Switching::Pending,
                 ..scene("zh-CN-switch-pending-light", Light, in_sync)
             },
-            Scene {
-                update: Update::Available,
-                overlay: Overlay::Settings,
-                tall: true,
-                ..scene("update-settings-light", Light, in_sync)
-            },
-            Scene {
-                language: "zh-CN",
-                update: Update::Available,
-                ..scene("zh-CN-update-available-light", Light, in_sync)
-            },
-            Scene { language: "zh-CN", update: Update::Updated, ..scene("zh-CN-update-done-light", Light, in_sync) },
-            Scene {
-                language: "zh-CN",
-                update: Update::Downloading,
-                overlay: Overlay::Settings,
-                tall: true,
-                ..scene("zh-CN-update-settings-dark", Dark, in_sync)
-            },
         ];
 
         let text_system = gpui_kit::platform::current_platform(true).text_system();
@@ -277,8 +233,8 @@ mod mac {
             let overview = Some(report::overview(&ctx));
             let snapshots = cc_same_core::snapshot::list(&ctx);
             i18n::apply(&ctx.config().language);
-            let (update, switching, overlay) = (Update::None, Switching::Idle, Overlay::None);
-            let shot = Shot { busy: None, update, switching, overlay, height: HEIGHT };
+            let (switching, overlay) = (Switching::Idle, Overlay::None);
+            let shot = Shot { busy: None, switching, overlay, height: HEIGHT };
             capture(&mut cx, &out.join("live.png"), ctx, overview, snapshots, shot)?;
             return Ok(());
         }
@@ -291,8 +247,8 @@ mod mac {
             let overview = (scene.build)(&sample);
             let path = out.join(format!("{}.png", scene.name));
             let height = if scene.tall { 1560. } else { HEIGHT };
-            let (update, switching, overlay) = (scene.update, scene.switching, scene.overlay);
-            let shot = Shot { busy: scene.busy, update, switching, overlay, height };
+            let (switching, overlay) = (scene.switching, scene.overlay);
+            let shot = Shot { busy: scene.busy, switching, overlay, height };
             capture(&mut cx, &path, sample.ctx.clone(), overview, sample_snapshots(), shot)?;
         }
         Ok(())
@@ -301,7 +257,6 @@ mod mac {
     /// How a scene is shown: what is running, what is open on top, and how tall the window is.
     struct Shot {
         busy: Option<Busy>,
-        update: Update,
         switching: Switching,
         overlay: Overlay,
         height: f32,
@@ -315,26 +270,23 @@ mod mac {
         snapshots: Vec<Manifest>,
         shot: Shot,
     ) -> anyhow::Result<()> {
-        let Shot { busy, update, switching, overlay, height } = shot;
+        let Shot { busy, switching, overlay, height } = shot;
         let store = cx.update(|cx| Store::preview(ctx, overview, snapshots, busy, cx));
         cx.update(|cx| {
-            store.update(cx, |store, _| {
-                store.updates = sample_updates(update);
-                match switching {
-                    Switching::Idle | Switching::Restarting => {}
-                    Switching::ToGrace => store.switching_to = Some(GRACE.0.into()),
-                    Switching::Confirming | Switching::AfterWork => {
-                        store.switching_to = Some(GRACE.0.into());
-                        let quitting = match switching {
-                            Switching::Confirming => Quitting::Confirming,
-                            _ => Quitting::AfterWork,
-                        };
-                        store.waiting = Some(Arc::new(Waiting::new(quitting)));
-                    }
-                    Switching::Pending => {
-                        let expected = None;
-                        store.signing_in = Some(SigningIn { previous: Some(ADA.0.into()), expected });
-                    }
+            store.update(cx, |store, _| match switching {
+                Switching::Idle | Switching::Restarting => {}
+                Switching::ToGrace => store.switching_to = Some(GRACE.0.into()),
+                Switching::Confirming | Switching::AfterWork => {
+                    store.switching_to = Some(GRACE.0.into());
+                    let quitting = match switching {
+                        Switching::Confirming => Quitting::Confirming,
+                        _ => Quitting::AfterWork,
+                    };
+                    store.waiting = Some(Arc::new(Waiting::new(quitting)));
+                }
+                Switching::Pending => {
+                    let expected = None;
+                    store.signing_in = Some(SigningIn { previous: Some(ADA.0.into()), expected });
                 }
             })
         });
@@ -362,16 +314,6 @@ mod mac {
                 Overlay::Name(account) => this.open_name(account.into(), window, cx),
                 Overlay::NameRefused => this.open_name(GRACE.0.into(), window, cx),
                 Overlay::Hover(account) => this.set_hovered(Some(account.into()), cx),
-                Overlay::SettingsToast => {
-                    this.open_settings(window, cx);
-                    let message = i18n::tf("update.up_to_date", &[("version", &update::VERSION)]);
-                    cc_same_app::view::show_outcome(&Ok(message), window, cx);
-                }
-                Overlay::Notes => {
-                    let release = sample_release();
-                    let title = i18n::tf("update.notes_title", &[("version", &release.version)]);
-                    cc_same_app::view::open_notes(title, release.notes, window, cx);
-                }
             })
         })?;
         settle(cx, window.into())?;
@@ -671,42 +613,5 @@ mod mac {
             snap("20260929-171933-watch", "watch", 3),
             snap("20260929-190455-app", "app", 3),
         ]
-    }
-
-    /// A release after this one, with this version's notes.
-    fn sample_release() -> Release {
-        let notes = update::changes_since(Some(&semver::Version::new(0, 1, 0)));
-        let notes = notes.lines().skip(1).collect::<Vec<_>>().join("\n").trim().to_string();
-        Release {
-            version: semver::Version::new(0, 2, 0),
-            notes,
-            page: "https://github.com/songkeys/cc-same/releases/tag/v0.2.0".into(),
-            asset: Some(Asset {
-                name: "CC-Same-0.2.0-macos-arm64.zip".into(),
-                url: "https://github.com/songkeys/cc-same/releases/download/v0.2.0/CC-Same-0.2.0-macos-arm64.zip"
-                    .into(),
-                size: 1000,
-                sha256: None,
-            }),
-        }
-    }
-
-    fn sample_updates(update: Update) -> Updates {
-        let mut updates = Updates::default();
-        updates.checked_at = Some(fsx::now_secs() - 300.);
-        match update {
-            Update::None => {}
-            Update::Updated => updates.updated_from = Some("0.1.0".into()),
-            _ => updates.available = Some(sample_release()),
-        }
-        updates.phase = match update {
-            Update::Downloading => UpdatePhase::Downloading(Arc::new(AtomicU64::new(420))),
-            Update::Ready => UpdatePhase::Ready(PathBuf::from("/tmp/CC Same.app")),
-            _ => UpdatePhase::Idle,
-        };
-        if let Update::Failed = update {
-            updates.problem = Some((Problem::ReadOnly, "Permission denied (os error 13)".into()));
-        }
-        updates
     }
 }

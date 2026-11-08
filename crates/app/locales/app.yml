@@ -2,6 +2,22 @@
 # CLDR form: .one/.other, .one/.few/.many (ru), .other only (zh, ja, ko).
 _version: 2
 
+"page.desktop":
+  en: "Desktop"
+  zh-CN: "桌面端"
+"page.cli":
+  en: "CLI"
+  zh-CN: "CLI"
+"page.usage":
+  en: "Usage"
+  zh-CN: "用量"
+"usage.refresh":
+  en: "Refresh"
+  zh-CN: "刷新"
+"usage.refreshing":
+  en: "Refreshing…"
+  zh-CN: "正在刷新…"
+
 "cli.title":
   en: "CLI accounts"
   zh-CN: "CLI 账号"

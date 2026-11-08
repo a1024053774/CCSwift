@@ -2,6 +2,7 @@
 
 use anyhow::{Context as _, Result};
 use auto_launch::{AutoLaunch, AutoLaunchBuilder};
+use std::path::Path;
 
 /// Passed by the login item: start without a window.
 pub const HIDDEN: &str = "--hidden";
@@ -33,4 +34,37 @@ pub fn enabled() -> bool {
 pub fn set(on: bool) -> Result<()> {
     let launcher = launcher()?;
     if on { launcher.enable() } else { launcher.disable() }.context("changing the login item")
+}
+
+/// Whether `path` is somewhere an app cannot stay: a disk image, or the temporary read-only
+/// place macOS runs a downloaded app from until it is moved (App Translocation).
+#[cfg(target_os = "macos")]
+pub fn temporary_place(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt as _;
+    if path.components().any(|c| c.as_os_str() == "AppTranslocation") {
+        return true;
+    }
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else { return false };
+    let mut volume: libc::statfs = unsafe { std::mem::zeroed() };
+    let found = unsafe { libc::statfs(c_path.as_ptr(), &mut volume) } == 0;
+    found && volume.f_flags & libc::MNT_RDONLY as u32 != 0
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn temporary_place(_path: &Path) -> bool {
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_disk_image_or_a_translocated_app_is_a_temporary_place() {
+        let translocated = "/private/var/folders/x/T/AppTranslocation/0A1B/d/CC Same.app/Contents/MacOS/CC Same";
+        assert!(temporary_place(Path::new(translocated)));
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!temporary_place(dir.path()));
+    }
 }

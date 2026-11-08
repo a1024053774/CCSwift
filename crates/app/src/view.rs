@@ -6,9 +6,8 @@ use crate::hero;
 use crate::i18n::{t, tf, tn};
 use crate::model::{self, Account, Busy, Fullness, Login, Mood, PlanUse};
 use crate::settings;
-use crate::store::{Store, StoreEvent, UpdatePhase};
+use crate::store::{Store, StoreEvent};
 use crate::theme;
-use crate::update::{self, Release};
 use cc_same_core::desktop::Quitting;
 use cc_same_core::report::Warning;
 use cc_same_core::retention::Limit;
@@ -26,19 +25,17 @@ use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::tag::Tag;
-use gpui_kit::component::text::{TextView, TextViewStyle};
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, Theme, TitleBar, WindowExt as _, h_flex, v_flex,
 };
 use gpui_kit::{
-    Anchor, Animation, AnimationExt as _, AnyElement, App, AppContext as _, ClickEvent, Context, Div, ElementId,
-    Entity, FocusHandle, FontWeight, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    Render, SharedString, StatefulInteractiveElement as _, Styled as _, StyledText, Subscription, Window, actions, div,
+    Anchor, Animation, AnimationExt as _, AnyElement, App, AppContext as _, Context, Div, ElementId, Entity,
+    FocusHandle, FontWeight, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Render,
+    SharedString, StatefulInteractiveElement as _, Styled as _, StyledText, Subscription, Window, actions, div,
     ease_out_quint, linear_color_stop, linear_gradient, prelude::FluentBuilder as _, px, rems,
 };
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Duration;
 
 actions!(cc_same, [Refresh, SyncNow, OpenSettings]);
@@ -403,9 +400,9 @@ impl UniApp {
                 TabBar::new("account-pages")
                     .segmented()
                     .selected_index(self.page)
-                    .child(Tab::new().label("Desktop"))
-                    .child(Tab::new().label("CLI"))
-                    .child(Tab::new().label("Usage"))
+                    .child(Tab::new().label(t("page.desktop")))
+                    .child(Tab::new().label(t("page.cli")))
+                    .child(Tab::new().label(t("page.usage")))
                     .on_click(cx.listener(|this, index: &usize, _, cx| {
                         this.page = *index;
                         if this.page == 2 {
@@ -425,7 +422,7 @@ impl UniApp {
         use std::collections::BTreeMap;
         let store = self.store.read(cx);
         let muted = cx.theme().muted_foreground;
-        // One email row, with independent source timestamps and numbers.
+        // One email row, showing the newest successful reading.
         let mut rows: BTreeMap<String, (Option<Usage>, bool, bool)> = BTreeMap::new();
         for account in store.accounts() {
             let email = account.email.unwrap_or(account.name);
@@ -442,31 +439,40 @@ impl UniApp {
             }
         }
         let mut list = surface(cx).p_3().gap_4();
-        for (email, (desktop, has_desktop, cli)) in rows {
-            let mut row = v_flex().gap_2().child(div().font_weight(FontWeight::MEDIUM).child(email.clone()));
-            if has_desktop {
-                row = row.child(usage_source(&format!("desktop-{email}"), "Desktop", desktop, None, cx));
-            }
-            if cli {
-                let reading = store.cli_usage.readings.get(&email);
-                let status = reading
+        for (email, (desktop, _, cli)) in rows {
+            let reading = cli.then(|| store.cli_usage.readings.get(&email)).flatten();
+            let cli_usage = reading.and_then(|r| r.usage);
+            let (source, usage) = if cli_usage.is_some_and(|u| desktop.is_none_or(|d| u.at > d.at)) {
+                (t("page.cli"), cli_usage)
+            } else {
+                (t("page.desktop"), desktop)
+            };
+            let detail = if let Some(usage) = usage {
+                format!("{source} · {}", crate::i18n::ago(usage.at))
+            } else {
+                reading
                     .and_then(|r| r.problem)
                     .map(|p| p.message())
-                    .or_else(|| (store.usage_loading && reading.is_none()).then_some("loading…"));
-                row =
-                    row.child(usage_source(&format!("cli-{email}"), "CLI", reading.and_then(|r| r.usage), status, cx));
-            }
-            list = list.child(row);
+                    .unwrap_or(if store.usage_loading { "loading…" } else { "unavailable" })
+                    .to_string()
+            };
+            list = list.child(
+                v_flex()
+                    .gap_2()
+                    .child(div().font_weight(FontWeight::MEDIUM).child(email.clone()))
+                    .child(usage_bars(&email, usage, cx))
+                    .child(div().text_size(rems(0.846)).text_color(muted).child(detail)),
+            );
         }
         v_flex()
             .p_5()
             .gap_3()
             .child(
-                h_flex().justify_between().child(section_label("Usage".into(), cx)).child(
+                h_flex().justify_between().child(section_label(t("page.usage"), cx)).child(
                     Button::new("refresh-usage")
                         .small()
                         .outline()
-                        .label(if store.usage_loading { "Refreshing…" } else { "Refresh" })
+                        .label(t(if store.usage_loading { "usage.refreshing" } else { "usage.refresh" }))
                         .disabled(store.usage_loading)
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.store.update(cx, |s, cx| s.refresh_usage(cx));
@@ -492,48 +498,55 @@ impl UniApp {
             Some(Ok(accounts)) if !accounts.is_empty() => {
                 for account in accounts {
                     let slot = account.slot;
-                    list =
-                        list.child(
-                            h_flex()
-                                .px_3()
-                                .py_3()
-                                .gap_3()
-                                .child(div().text_color(muted).child(account.slot.to_string()))
-                                .child(
-                                    v_flex()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .gap_1()
-                                        .child(div().font_weight(FontWeight::MEDIUM).child(account.email.clone()))
-                                        .child(
-                                            div()
-                                                .text_size(rems(0.846))
-                                                .text_color(muted)
-                                                .child(account.organization.clone()),
-                                        ),
+                    list = list.child(
+                        h_flex()
+                            .px_3()
+                            .py_3()
+                            .gap_3()
+                            .child(div().w(px(20.)).flex_shrink_0().text_color(muted).child(account.slot.to_string()))
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .gap_1()
+                                    .child(div().font_weight(FontWeight::MEDIUM).child(account.email.clone()))
+                                    .when(
+                                        !account.organization.is_empty()
+                                            && account.organization != format!("{}'s Organization", account.email),
+                                        |column| {
+                                            column.child(
+                                                div()
+                                                    .text_size(rems(0.846))
+                                                    .text_color(muted)
+                                                    .child(account.organization.clone()),
+                                            )
+                                        },
+                                    ),
+                            )
+                            .when(!account.active, |row| {
+                                row.child(
+                                    Button::new(SharedString::from(format!("cli-switch-{slot}")))
+                                        .small()
+                                        .ghost()
+                                        .label(t(if store.cli_switching == Some(slot) {
+                                            "account.switching"
+                                        } else {
+                                            "account.switch"
+                                        }))
+                                        .disabled(store.cli_switching.is_some())
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.store.update(cx, |store, cx| store.switch_cli(slot, cx));
+                                        })),
                                 )
-                                .when(!account.active, |row| {
-                                    row.child(
-                                        Button::new(SharedString::from(format!("cli-switch-{slot}")))
-                                            .small()
-                                            .ghost()
-                                            .label(t(if store.cli_switching == Some(slot) {
-                                                "account.switching"
-                                            } else {
-                                                "account.switch"
-                                            }))
-                                            .disabled(store.cli_switching.is_some())
-                                            .on_click(cx.listener(move |this, _, _, cx| {
-                                                this.store.update(cx, |store, cx| store.switch_cli(slot, cx));
-                                            })),
-                                    )
-                                })
-                                .when(account.active, |row| {
-                                    row.child(Tag::secondary().small().rounded_full().child(
+                            })
+                            .when(account.active, |row| {
+                                row.child(
+                                    Tag::secondary().small().rounded_full().child(
                                         h_flex().gap_1p5().child(dot(cx.theme().primary)).child(t("cli.active")),
-                                    ))
-                                }),
-                        );
+                                    ),
+                                )
+                            }),
+                    );
                 }
             }
             result => {
@@ -945,7 +958,6 @@ impl UniApp {
             });
             notices.push(notice("notice-retention", Tone::Warning, text, action.into_iter().collect(), None, cx));
         }
-        notices.extend(self.render_update_notice(cx));
         notices
     }
 
@@ -993,93 +1005,6 @@ impl UniApp {
                 .into_any_element()
         });
         Some(notice("notice-sign-in", Tone::Info, text, back.into_iter().collect(), None, cx))
-    }
-
-    /// A new version: available, on its way, ready, or just installed.
-    fn render_update_notice(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let (updates, busy) = {
-            let store = self.store.read(cx);
-            (store.updates.clone(), store.busy)
-        };
-        let store = self.store.clone();
-        let update_now = |id: &'static str, label: String, enabled: bool| -> AnyElement {
-            let store = store.clone();
-            Button::new(id)
-                .small()
-                .primary()
-                .label(label)
-                .disabled(!enabled)
-                .on_click(move |_, _, cx| store.update(cx, |store, cx| store.update_or_check(cx)))
-                .into_any_element()
-        };
-        let Some(release) = updates.available.clone() else {
-            // Just updated: what changed since the version before.
-            let from = updates.updated_from.clone()?;
-            let notes = update::changes_since(semver::Version::parse(&from).ok().as_ref());
-            let title = tf("update.notes_title", &[("version", &update::VERSION)]);
-            let dismiss = {
-                let store = store.clone();
-                move |_: &ClickEvent, _: &mut Window, cx: &mut App| store.update(cx, |s, cx| s.dismiss_updated(cx))
-            };
-            let read = Button::new("updated-notes").small().outline().label(t("update.whats_new")).on_click({
-                let dismiss = dismiss.clone();
-                move |event, window, cx| {
-                    open_notes(title.clone(), notes.clone(), window, cx);
-                    dismiss(event, window, cx);
-                }
-            });
-            let close = Button::new("updated-close").ghost().xsmall().icon(IconName::Close).on_click(dismiss);
-            let text = tf("update.updated", &[("version", &update::VERSION)]);
-            return Some(notice(
-                "notice-updated",
-                Tone::New,
-                text,
-                vec![read.into_any_element()],
-                Some(close.into_any_element()),
-                cx,
-            ));
-        };
-        let version = release.version.to_string();
-        let whats_new = release_notes_button(&release);
-        let (tone, text, actions) = match &updates.phase {
-            UpdatePhase::Downloading(_) => {
-                let percent = updates.progress().unwrap_or(0.) * 100.;
-                let bar = div().w_full().pt_0p5().child(Progress::new("update-progress").value(percent));
-                (Tone::Update, tf("update.downloading", &[("version", &version)]), vec![bar.into_any_element()])
-            }
-            UpdatePhase::Installing => (Tone::Update, tf("update.installing", &[("version", &version)]), Vec::new()),
-            UpdatePhase::Ready(_) => (
-                Tone::Update,
-                tf("update.ready", &[("version", &version)]),
-                vec![update_now("update-restart", t("update.restart"), busy.is_none()), whats_new],
-            ),
-            UpdatePhase::Idle | UpdatePhase::Checking => match &updates.problem {
-                Some((problem, _)) => {
-                    let page = release.page.clone();
-                    let download = Button::new("update-download")
-                        .small()
-                        .outline()
-                        .icon(IconName::ExternalLink)
-                        .label(t("update.download"))
-                        .on_click(move |_, _, cx| cx.open_url(&page));
-                    let retry = Button::new("update-retry").small().outline().label(t("update.retry")).on_click({
-                        let store = store.clone();
-                        move |_, _, cx| store.update(cx, |store, cx| store.update_or_check(cx))
-                    });
-                    (
-                        Tone::Warning,
-                        t(problem.message_key()),
-                        vec![retry.disabled(updates.working()).into_any_element(), download.into_any_element()],
-                    )
-                }
-                None => (
-                    Tone::Update,
-                    tf("update.available", &[("version", &version)]),
-                    vec![update_now("update-now", t("update.install"), !updates.working()), whats_new],
-                ),
-            },
-        };
-        Some(notice("notice-update", tone, text, actions, None, cx))
     }
 }
 
@@ -1275,18 +1200,12 @@ fn emphasize_numbers(text: String, color: Hsla) -> StyledText {
 }
 
 // Two Lucide icons (ISC license) that GPUI Kit's default icon set leaves out.
-const CIRCLE_ARROW_UP: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/></svg>"#;
-const SPARKLES: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg>"#;
 
 #[derive(Clone, Copy)]
 enum Tone {
     Info,
     Warning,
     Danger,
-    /// A new version is available or on its way.
-    Update,
-    /// This version is new.
-    New,
 }
 
 /// A short note with its actions, tinted by what it is about, and a close button when it can be
@@ -1304,8 +1223,6 @@ fn notice(
         Tone::Info => (Icon::new(IconName::Info), theme.info),
         Tone::Warning => (Icon::new(IconName::TriangleAlert), theme.warning),
         Tone::Danger => (Icon::new(IconName::CircleAlert), theme.danger),
-        Tone::Update => (Icon::default().data(CIRCLE_ARROW_UP), theme.primary),
-        Tone::New => (Icon::default().data(SPARKLES), theme.primary),
     };
     h_flex()
         .id(id)
@@ -1336,70 +1253,26 @@ fn notice(
         .into_any_element()
 }
 
-/// "What's new" for a release: its notes from GitHub.
-fn release_notes_button(release: &Release) -> AnyElement {
-    let title = tf("update.notes_title", &[("version", &release.version)]);
-    let notes = release.notes.clone();
-    Button::new("update-notes")
-        .small()
-        .ghost()
-        .label(t("update.whats_new"))
-        .on_click(move |_, window, cx| open_notes(title.clone(), notes.clone(), window, cx))
-        .into_any_element()
-}
-
-/// Release notes, in Markdown, in a dialog.
-pub fn open_notes(title: String, notes: String, window: &mut Window, cx: &mut App) {
-    let notes: SharedString = if notes.trim().is_empty() { t("update.no_notes").into() } else { notes.into() };
-    // Headings stay below the dialog's title: a version, then its sections.
-    let style = TextViewStyle {
-        paragraph_gap: rems(0.75),
-        heading_font_size: Some(Arc::new(|level, _| px(if level <= 2 { 15. } else { 13. }))),
-        ..TextViewStyle::default()
-    };
-    window.open_dialog(cx, move |dialog, _, _| {
-        dialog.title(title.clone()).w(px(380.)).child(
-            TextView::markdown("release-notes", notes.clone())
-                .style(style.clone())
-                .text_size(rems(0.923))
-                .selectable(true),
-        )
-    });
-}
-
-fn usage_source(
-    id: &str,
-    source: &str,
-    usage: Option<cc_same_core::usage::Usage>,
-    status: Option<&str>,
-    cx: &App,
-) -> AnyElement {
-    let age = usage.map(|u| crate::i18n::ago(u.at));
-    let detail = match (age, status) {
-        (Some(age), Some(status)) => format!("{source} · {age} · {status}"),
-        (Some(age), None) => format!("{source} · {age}"),
-        (None, status) => format!("{source} · {}", status.unwrap_or("unavailable")),
-    };
-    let mut view =
-        v_flex().gap_1().child(div().text_size(rems(0.846)).text_color(cx.theme().muted_foreground).child(detail));
-    for (key, label, value) in
-        [("5h", "5-hour", usage.and_then(|u| u.five_hour)), ("7d", "Weekly", usage.and_then(|u| u.weekly))]
-    {
+fn usage_bars(id: &str, usage: Option<cc_same_core::usage::Usage>, _cx: &App) -> AnyElement {
+    let mut bars = h_flex().gap_4();
+    for (label, value) in [("5h", usage.and_then(|u| u.five_hour)), ("7d", usage.and_then(|u| u.weekly))] {
         let text = value.map(|v| format!("{v:.0}%")).unwrap_or_else(|| "—".into());
-        view = view.child(
+        bars = bars.child(
             h_flex()
+                .flex_1()
+                .min_w_0()
                 .gap_2()
-                .child(div().w(px(48.)).text_size(rems(0.846)).child(label))
+                .child(div().text_size(rems(0.846)).child(label))
                 .child(
                     div().flex_1().child(
-                        Progress::new(SharedString::from(format!("{id}-{key}")))
+                        Progress::new(SharedString::from(format!("{id}-{label}")))
                             .xsmall()
-                            .accessibility_label(format!("{source} {label}: {text}"))
+                            .accessibility_label(format!("{id} {label}: {text}"))
                             .value(value.unwrap_or(0.).clamp(0., 100.) as f32),
                     ),
                 )
-                .child(div().w(px(36.)).text_size(rems(0.846)).child(text)),
+                .child(div().w(px(32.)).text_size(rems(0.846)).child(text)),
         );
     }
-    view.into_any_element()
+    bars.into_any_element()
 }

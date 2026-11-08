@@ -44,11 +44,9 @@ impl Cache {
         for account in accounts {
             let entry = self.readings.entry(account.email.clone()).or_default();
             if entry.attempted.is_some_and(|at| at.elapsed() < Duration::from_secs(60)) {
-                eprintln!("CLI usage slot {}: throttled", account.slot);
                 continue;
             }
             entry.attempted = Some(Instant::now());
-            eprintln!("CLI usage slot {}: attempt", account.slot);
             match fetch(account) {
                 Ok(usage) => {
                     entry.usage = Some(usage);
@@ -61,17 +59,14 @@ impl Cache {
 }
 
 fn fetch(account: &Account) -> Result<Usage, Problem> {
-    let output = Command::new("/usr/bin/security")
-        .args([
-            "find-generic-password",
-            "-s",
-            "claude-swap",
-            "-a",
-            &format!("account-{}-{}", account.slot, account.email),
-            "-w",
-        ])
-        .output()
-        .map_err(|_| Problem::Unavailable)?;
+    let mut command = Command::new("/usr/bin/security");
+    command.arg("find-generic-password");
+    if account.active {
+        command.args(["-s", "Claude Code-credentials"]);
+    } else {
+        command.args(["-s", "claude-swap", "-a", &format!("account-{}-{}", account.slot, account.email)]);
+    }
+    let output = command.arg("-w").output().map_err(|_| Problem::Unavailable)?;
     if !output.status.success() {
         return Err(Problem::Unavailable);
     }

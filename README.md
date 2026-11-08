@@ -41,10 +41,11 @@ activating the selected login; Claude Desktop is unaffected. Add accounts with
 `cswap add`. Listing loads metadata in the background without Keychain or network
 access; switching also runs in the background.
 
-The Usage page joins accounts by email, with separate Desktop and CLI readings,
-5-hour and weekly bars, and the age of each reading. Desktop usage comes from
+The Usage page joins accounts by email in compact rows with 5-hour and weekly
+bars side by side. Each row shows the newer reading and its source and age. Desktop usage comes from
 its local history. Opening Usage or pressing Refresh (Cmd+R) reads CLI usage
 from the OAuth endpoint, at most once a minute per email while the app runs.
+The active CLI slot uses its live Keychain credential; other slots use their backups.
 Keychain and network work run in the background. Failed requests keep the last
 reading in memory, or show unavailable; expired credentials show “needs cswap
 refresh”. This view never refreshes tokens or writes account stores.
@@ -73,7 +74,7 @@ refresh”. This view never refreshes tokens or writes account stores.
 **App.** Download `CC-Same-<version>-<platform>` from
 [Releases](https://github.com/songkeys/cc-same/releases): the `.dmg` for `macos-arm64` or `macos-x64`,
 or the archive for `windows-x64`, `linux-x64` or `linux-arm64`. Open it and switch on
-**Sync in the background**. That's all: from then on the app updates itself (Settings › Updates).
+**Sync in the background**. This fork does not check for or install upstream app updates.
 
 - The Mac app is signed with a Developer ID and notarized by Apple.
 - The Windows build is not code-signed yet, so SmartScreen may ask first: **More info → Run anyway**.

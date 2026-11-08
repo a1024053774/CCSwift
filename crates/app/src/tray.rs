@@ -3,7 +3,7 @@
 
 use crate::i18n::{t, tf};
 use crate::model::Busy;
-use crate::store::{Store, UpdatePhase};
+use crate::store::Store;
 use gpui_kit::App;
 use std::rc::Rc;
 
@@ -14,8 +14,6 @@ pub enum Command {
     SyncNow,
     ToggleBackground,
     Settings,
-    /// Install the new version, or look for one.
-    Update,
     /// Switch Claude to this account.
     SwitchTo(String),
     SwitchCli(u64),
@@ -51,9 +49,6 @@ pub struct Status {
     pub background_label: String,
     pub open: String,
     pub settings: String,
-    /// "Check for Updates…", or "Update to 0.2.0…" once there is one.
-    pub update: String,
-    pub update_enabled: bool,
     /// Switching accounts is available on this system.
     pub can_switch: bool,
     /// Every account CC Same knows: the list by number, then the others.
@@ -72,12 +67,6 @@ impl Status {
     pub fn of(store: &Store) -> Status {
         let mood = store.mood();
         let idle = store.busy.is_none();
-        let (update, update_enabled) = match (&store.updates.phase, &store.updates.available) {
-            (UpdatePhase::Checking, _) => (t("app.checking_updates"), false),
-            (UpdatePhase::Downloading(_) | UpdatePhase::Installing, _) => (t("app.updating"), false),
-            (_, Some(release)) => (tf("app.update_to", &[("version", &release.version)]), true),
-            (_, None) => (t("app.check_updates"), true),
-        };
         let logins = store.overview.as_ref().map(|o| o.logins.clone()).unwrap_or_default();
         // Every account, not only the ones with a sign-in kept: choosing one without asks to sign in.
         let rows = store.accounts();
@@ -99,8 +88,6 @@ impl Status {
             background_label: t("background.title"),
             open: t("app.open"),
             settings: t("app.settings"),
-            update,
-            update_enabled,
             // Decided by the system, not by the overview: the menu is built at launch, before the
             // first overview arrives, and the submenu is only ever added then.
             can_switch: cc_same_core::logins::supported(),
@@ -202,7 +189,6 @@ mod platform {
         background: CheckMenuItem,
         open: MenuItem,
         settings: MenuItem,
-        update: MenuItem,
         quit: MenuItem,
         /// "Switch Account", when switching is available.
         accounts: Option<Submenu>,
@@ -267,7 +253,6 @@ mod platform {
                 CheckMenuItem::new(&status.background_label, status.background_enabled, status.background, None);
             let open = MenuItem::new(&status.open, true, None);
             let settings = MenuItem::new(&status.settings, true, None);
-            let update = MenuItem::new(&status.update, status.update_enabled, None);
             let quit = MenuItem::new(&status.quit, true, None);
             let account_commands = Rc::new(RefCell::new(Vec::new()));
             let accounts = status.can_switch.then(|| {
@@ -288,7 +273,6 @@ mod platform {
                 &PredefinedMenuItem::separator(),
                 &open,
                 &settings,
-                &update,
                 &PredefinedMenuItem::separator(),
                 &quit,
             ])?;
@@ -307,7 +291,6 @@ mod platform {
                 (background.id().clone(), Command::ToggleBackground),
                 (open.id().clone(), Command::Open),
                 (settings.id().clone(), Command::Settings),
-                (update.id().clone(), Command::Update),
                 (quit.id().clone(), Command::Quit),
             ];
             let tray_id = icon.id().clone();
@@ -354,7 +337,6 @@ mod platform {
                 background,
                 open,
                 settings,
-                update,
                 quit,
                 accounts,
                 account_commands,
@@ -379,8 +361,6 @@ mod platform {
             self.background.set_checked(status.background);
             self.open.set_text(&status.open);
             self.settings.set_text(&status.settings);
-            self.update.set_text(&status.update);
-            self.update.set_enabled(status.update_enabled);
             self.quit.set_text(&status.quit);
             if let Some(accounts) = &self.accounts {
                 accounts.set_text(&status.switch_label);
@@ -522,13 +502,6 @@ mod platform {
                 StandardItem {
                     label: s.settings.clone(),
                     activate: Box::new(|this: &mut Self| this.send(Command::Settings)),
-                    ..Default::default()
-                }
-                .into(),
-                StandardItem {
-                    label: s.update.clone(),
-                    enabled: s.update_enabled,
-                    activate: Box::new(|this: &mut Self| this.send(Command::Update)),
                     ..Default::default()
                 }
                 .into(),
