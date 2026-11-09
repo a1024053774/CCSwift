@@ -93,7 +93,7 @@ if [[ "${NOTARIZE:-0}" == "1" ]]; then
   xcrun stapler validate "$dmg"
 fi
 
-cli_archive="$out/ccswift-cli-$version-macos-$arch.tar.gz"
+cli_archive="$out/CCSwift-$version-cli-macos-$arch.tar.gz"
 tar -C "$cli" -czf "$cli_archive" cc-same
 
 printf '%s\n' "$zip" "$dmg" "$cli_archive"

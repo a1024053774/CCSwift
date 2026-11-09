@@ -11,7 +11,8 @@
 
 CCSwift is a fork of [songkeys/cc-same](https://github.com/songkeys/cc-same). It keeps CC Same's
 Desktop session sync and one-click Desktop switching unchanged, and adds the CLI account switching of
-[realiti4/claude-swap](https://github.com/realiti4/claude-swap) as a GUI. Thanks to both projects.
+[realiti4/claude-swap](https://github.com/realiti4/claude-swap) in a standalone app; `cswap` is not required.
+Thanks to both projects.
 
 ## What it does
 
@@ -45,8 +46,8 @@ in Settings or the app menu; use the arrow keys or Back/Next to move between ste
 Desktop and CLI are switched independently. The white and black themes use warm greys and
 Claude orange, with Times New Roman for English and Songti SC for Simplified Chinese. Other
 languages fall back to English. The optional Claude mark is read from the installed Claude.app
-at runtime. Usage fetches start after the first frame; Keychain and network work runs off the
-UI thread.
+at runtime and is not bundled with CCSwift. Usage fetches start after the first frame; Keychain
+and network work runs off the UI thread.
 
 ## Install (macOS, Apple Silicon)
 
@@ -134,7 +135,7 @@ cargo build --release                        # CLI (Rust 1.85+)
 cargo test                                   # engine + CLI tests
 cargo app                                    # run the app
 cargo app-test                               # app tests
-scripts/bundle-macos.sh                      # CC Same.app + archives in dist/
+scripts/bundle-macos.sh                      # CCSwift.app + archives in dist/
 cargo app --example screenshot -- out/       # render every app state to PNG (macOS)
 ```
 
