@@ -32,5 +32,5 @@ CCSwift, one macOS app (this fork of CC Same), switches **Desktop** accounts (ex
 
 | Doc | Covers | Verified |
 | --- | --- | --- |
-| [README.md](../README.md) | `crates/app/src/**`, `crates/core/src/cli_accounts*.rs`, `crates/core/src/cli_usage.rs` | b96f6c8 |
+| [README.md](../README.md) | `crates/app/src/**`, `crates/core/src/cli_accounts*.rs`, `crates/core/src/cli_usage.rs` | ca64a6d |
 | [CONTEXT.md](../CONTEXT.md) | `crates/core/src/**` | b96f6c8 |
