@@ -25,7 +25,7 @@ use cc_same_core::{Config, Ctx, FakeDesktop, LogSink, Paths};
 use gpui_kit::component::TitleBar;
 use gpui_kit::{
     App, AppContext as _, Bounds, Context, Entity, Global, KeyBinding, Menu, MenuItem, QuitMode, Subscription,
-    TitlebarOptions, Window, WindowBounds, WindowOptions, actions, px, size,
+    TitlebarOptions, Window, WindowBounds, WindowOptions, actions, point, px, size,
 };
 use std::rc::Rc;
 use std::sync::Arc;
@@ -45,7 +45,13 @@ pub fn context() -> Arc<Ctx> {
 /// The window: small, centered, with GPUI Kit's title bar drawing the chrome on every platform.
 pub fn window_options(cx: &mut App) -> WindowOptions {
     WindowOptions {
-        titlebar: Some(TitlebarOptions { title: Some(APP_NAME.into()), ..TitleBar::title_bar_options() }),
+        // The title row is 52pt tall (view.rs); the kit's default (9, 9) suits its 34pt bar, so center
+        // the traffic lights on ours and give them the same 18pt left margin as the content.
+        titlebar: Some(TitlebarOptions {
+            title: Some(APP_NAME.into()),
+            traffic_light_position: Some(point(px(18.), px(19.))),
+            ..TitleBar::title_bar_options()
+        }),
         app_id: Some(APP_ID.into()),
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(720.), px(660.)), cx))),
         window_min_size: Some(size(px(640.), px(480.))),

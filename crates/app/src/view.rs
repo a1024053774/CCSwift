@@ -676,6 +676,7 @@ impl UniApp {
                     .child(
                         h_flex()
                             .gap_2()
+                            .pl(px(9.)) // the traffic lights moved 9pt right (lib.rs)
                             .text_size(px(17.))
                             .child("CCSwift")
                             .children(self.mark.clone().map(|mark| gpui_kit::img(mark).size(px(17.)))),
@@ -815,7 +816,7 @@ impl UniApp {
             |icon, title, detail, action: AnyElement| {
                 h_flex()
                     .h(px(50.))
-                    .px(px(14.))
+                    .px(px(16.)) // same inset as the current-account card above
                     .gap_3()
                     .child(Icon::new(icon).small().text_color(cx.theme().muted_foreground))
                     .child(v_flex().flex_1().min_w_0().child(title).child(
