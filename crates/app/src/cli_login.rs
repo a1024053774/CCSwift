@@ -20,11 +20,7 @@ pub fn open(store: Entity<Store>, target: Option<u64>, window: &mut Window, cx: 
     });
     window.open_dialog(cx, move |sheet, _, _| {
         sheet
-            .title(div().font_weight(gpui_kit::FontWeight::MEDIUM).child(t(if target.is_some() {
-                "ui.relogin"
-            } else {
-                "capture.title"
-            })))
+            .title(crate::theme::dialog_title(t(if target.is_some() { "ui.relogin" } else { "capture.title" })))
             .width(px(400.))
             .child(dialog.clone())
     });

@@ -53,6 +53,9 @@ impl ThemeChoice {
 
 /// Registers the CC Same themes as GPUI Kit's light and dark themes and loads the one that
 /// matches the system.
+/// Height of the window's title row; the traffic lights and sheets are placed against it.
+pub const TITLE_ROW: gpui_kit::Pixels = px(52.);
+
 pub fn install(cx: &mut App) {
     let set: ThemeSet = serde_json::from_str(THEMES).expect("the bundled theme is valid");
     let pick = |dark: bool| {
@@ -65,6 +68,8 @@ pub fn install(cx: &mut App) {
         theme.dark_theme = dark;
         theme.notification.placement = Anchor::BottomCenter;
         theme.notification.width = px(340.);
+        // Sheets open below our title row, not the kit's 34pt default.
+        theme.sheet.margin_top = TITLE_ROW;
     });
     let mode: ThemeMode = cx.window_appearance().into();
     Theme::change(mode, None, cx);
@@ -105,6 +110,12 @@ pub fn card_shadow(cx: &App) -> Vec<BoxShadow> {
             inset: false,
         },
     ]
+}
+
+/// Every dialog's title: one size and the design's medium weight (the kit's default is body-size semibold).
+pub fn dialog_title(text: impl Into<gpui_kit::SharedString>) -> gpui_kit::Div {
+    use gpui_kit::{ParentElement as _, Styled as _};
+    gpui_kit::div().font_weight(gpui_kit::FontWeight::MEDIUM).text_size(px(18.)).child(text.into())
 }
 
 pub fn font() -> &'static str {

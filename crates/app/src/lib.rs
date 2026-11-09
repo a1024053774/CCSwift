@@ -45,8 +45,8 @@ pub fn context() -> Arc<Ctx> {
 /// The window: small, centered, with GPUI Kit's title bar drawing the chrome on every platform.
 pub fn window_options(cx: &mut App) -> WindowOptions {
     WindowOptions {
-        // The title row is 52pt tall (view.rs); the kit's default (9, 9) suits its 34pt bar, so center
-        // the traffic lights on ours and give them the same 18pt left margin as the content.
+        // The kit's default (9, 9) suits its 34pt bar; center the traffic lights on our 52pt title row
+        // (theme::TITLE_ROW) and give them the same 18pt left margin as the content.
         titlebar: Some(TitlebarOptions {
             title: Some(APP_NAME.into()),
             traffic_light_position: Some(point(px(18.), px(19.))),

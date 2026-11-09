@@ -21,7 +21,9 @@ use gpui_kit::{
 };
 
 pub fn open(store: Entity<Store>, window: &mut Window, cx: &mut App) {
-    window.open_sheet(cx, move |sheet, _, cx| sheet.title(t("settings.title")).size(px(360.)).child(body(&store, cx)));
+    window.open_sheet(cx, move |sheet, _, cx| {
+        sheet.title(crate::theme::dialog_title(t("settings.title"))).size(px(360.)).child(body(&store, cx))
+    });
 }
 
 fn body(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
@@ -43,13 +45,16 @@ fn body(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
     let muted = cx.theme().muted_foreground;
 
     let mut general = vec![
-        Button::new("show-tutorial")
-            .outline()
-            .label(t("tutorial.show"))
-            .on_click(|_, window, cx| {
-                window.close_sheet(cx);
-                window.dispatch_action(Box::new(crate::view::ShowTutorial), cx);
-            })
+        // Inset like a row, so the button does not sit on the card's edge.
+        div()
+            .px_3()
+            .py_2p5()
+            .child(Button::new("show-tutorial").outline().w_full().label(t("tutorial.show")).on_click(
+                |_, window, cx| {
+                    window.close_sheet(cx);
+                    window.dispatch_action(Box::new(crate::view::ShowTutorial), cx);
+                },
+            ))
             .into_any_element(),
         row(
             t("settings.theme"),
@@ -328,7 +333,7 @@ fn group(title: String, rows: Vec<AnyElement>, cx: &App) -> AnyElement {
         .gap_2()
         .child(
             div()
-                .px_1()
+                .px_3() // level with the row text below
                 .text_size(rems(0.846))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(theme.muted_foreground)

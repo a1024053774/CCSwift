@@ -34,40 +34,40 @@ pub fn open(store: Entity<Store>, view: Entity<crate::view::UniApp>, window: &mu
             );
             let restoring = view.clone();
             rows = rows.child(
-                h_flex()
-                    .h(px(52.))
-                    .flex_none()
-                    .gap_3()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .child(
-                        v_flex().flex_1().child(model::snapshot_when(&snap.id)).child(
-                            div()
-                                .text_size(px(12.))
-                                .text_color(cx.theme().muted_foreground)
-                                .child(tf("backup.accounts", &[("n", &accounts)])),
-                        ),
-                    )
-                    .child(div().w(px(98.)).text_size(px(12.)).child(why))
-                    .child(div().w(px(65.)).text_size(px(12.)).text_color(cx.theme().muted_foreground).child(size))
-                    .child(
-                        Button::new(SharedString::from(format!("reveal-{}", snap.id)))
-                            .small()
-                            .outline()
-                            .icon(gpui_kit::component::IconName::FolderOpen)
-                            .tooltip(t("backup.reveal"))
-                            .on_click(move |_, _, cx| cx.reveal_path(&path)),
-                    )
-                    .child(
-                        Button::new(SharedString::from(format!("restore-{}", snap.id)))
-                            .small()
-                            .outline()
-                            .label(t("settings.restore"))
-                            .disabled(!idle)
-                            .on_click(move |_, window, cx| {
-                                restoring.update(cx, |this, cx| this.confirm_restore(&snap, window, cx));
-                            }),
+                columns(
+                    v_flex().child(model::snapshot_when(&snap.id)).child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(cx.theme().muted_foreground)
+                            .child(tf("backup.accounts", &[("n", &accounts)])),
                     ),
+                    div().text_size(px(12.)).child(why),
+                    div().text_size(px(12.)).text_color(cx.theme().muted_foreground).child(size),
+                    h_flex()
+                        .gap_2()
+                        .child(
+                            Button::new(SharedString::from(format!("reveal-{}", snap.id)))
+                                .small()
+                                .outline()
+                                .icon(gpui_kit::component::IconName::FolderOpen)
+                                .tooltip(t("backup.reveal"))
+                                .on_click(move |_, _, cx| cx.reveal_path(&path)),
+                        )
+                        .child(
+                            Button::new(SharedString::from(format!("restore-{}", snap.id)))
+                                .small()
+                                .outline()
+                                .label(t("settings.restore"))
+                                .disabled(!idle)
+                                .on_click(move |_, window, cx| {
+                                    restoring.update(cx, |this, cx| this.confirm_restore(&snap, window, cx));
+                                }),
+                        ),
+                )
+                .h(px(52.))
+                .flex_none()
+                .border_b_1()
+                .border_color(cx.theme().border),
             );
         }
         if state.snapshots.is_empty() {
@@ -75,73 +75,87 @@ pub fn open(store: Entity<Store>, view: Entity<crate::view::UniApp>, window: &mu
         }
         let saving = store.clone();
         let keeping = store.clone();
-        dialog
-            .width(px(600.))
-            .title(div().font_weight(gpui_kit::FontWeight::MEDIUM).text_size(px(19.)).child(t("backup.title")))
-            .child(
-                v_flex()
-                    .font_family(theme::font())
-                    .gap_3()
-                    .child(
-                        h_flex()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .text_size(px(13.))
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(t("backup.subtitle")),
-                            )
-                            .child(
-                                Button::new("backup-now")
-                                    .small()
-                                    .primary()
-                                    .bg(theme::jelly())
-                                    .label(t("backup.now"))
-                                    .disabled(!idle)
-                                    .on_click(move |_, _, cx| saving.update(cx, |s, cx| s.backup_now(cx))),
-                            ),
-                    )
-                    .child(
-                        h_flex()
-                            .text_size(px(12.))
-                            .text_color(cx.theme().muted_foreground)
-                            .child(div().flex_1().child(t("backup.time")))
-                            .child(div().w(px(110.)).child(t("backup.reason")))
-                            .child(div().w(px(77.)).child(t("backup.size")))
-                            .child(div().w(px(112.)).child(t("ui.colAction"))),
-                    )
-                    .child(rows)
-                    .child(
-                        h_flex().gap_2().child(t("backup.keep")).child(
-                            Button::new("keep-snapshots")
+        dialog.width(px(600.)).title(theme::dialog_title(t("backup.title"))).child(
+            v_flex()
+                .font_family(theme::font())
+                .gap_3()
+                .child(
+                    h_flex()
+                        .justify_between()
+                        .child(
+                            div()
+                                .text_size(px(13.))
+                                .text_color(cx.theme().muted_foreground)
+                                .child(t("backup.subtitle")),
+                        )
+                        .child(
+                            Button::new("backup-now")
                                 .small()
-                                .outline()
-                                .label(cfg.keep_snapshots.to_string())
-                                .dropdown_menu(move |mut menu, _, _| {
-                                    for n in [10, 20, 50] {
-                                        let store = keeping.clone();
-                                        menu = menu.item(
-                                            PopupMenuItem::new(n.to_string())
-                                                .checked(cfg.keep_snapshots == n)
-                                                .on_click(move |_, _, cx| {
-                                                    store.update(cx, |s, cx| {
-                                                        s.update_config(cx, |cfg| cfg.keep_snapshots = n)
-                                                    })
-                                                }),
-                                        );
-                                    }
-                                    menu
-                                }),
+                                .primary()
+                                .bg(theme::jelly())
+                                .label(t("backup.now"))
+                                .disabled(!idle)
+                                .on_click(move |_, _, cx| saving.update(cx, |s, cx| s.backup_now(cx))),
                         ),
+                )
+                .child(
+                    columns(
+                        div().child(t("backup.time")),
+                        div().child(t("backup.reason")),
+                        div().child(t("backup.size")),
+                        div().child(t("ui.colAction")),
                     )
-                    .child(
-                        div()
-                            .text_size(px(12.))
-                            .text_color(cx.theme().muted_foreground)
-                            .child(tf("backup.schedule", &[("minutes", &(cfg.snapshot_every_seconds / 60.))])),
+                    .text_size(px(12.))
+                    .text_color(cx.theme().muted_foreground),
+                )
+                .child(rows)
+                .child(
+                    h_flex().gap_2().child(t("backup.keep")).child(
+                        Button::new("keep-snapshots")
+                            .small()
+                            .outline()
+                            .label(cfg.keep_snapshots.to_string())
+                            .dropdown_menu(move |mut menu, _, _| {
+                                for n in [10, 20, 50] {
+                                    let store = keeping.clone();
+                                    menu = menu.item(
+                                        PopupMenuItem::new(n.to_string()).checked(cfg.keep_snapshots == n).on_click(
+                                            move |_, _, cx| {
+                                                store.update(cx, |s, cx| {
+                                                    s.update_config(cx, |cfg| cfg.keep_snapshots = n)
+                                                })
+                                            },
+                                        ),
+                                    );
+                                }
+                                menu
+                            }),
                     ),
-            )
+                )
+                .child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(cx.theme().muted_foreground)
+                        .child(tf("backup.schedule", &[("minutes", &(cfg.snapshot_every_seconds / 60.))])),
+                ),
+        )
     });
+}
+
+/// One layout for the header and every row, so each heading sits over its values. The action
+/// cell is right-aligned, like the main table's.
+fn columns(
+    time: impl gpui_kit::IntoElement,
+    reason: impl gpui_kit::IntoElement,
+    size: impl gpui_kit::IntoElement,
+    action: impl gpui_kit::IntoElement,
+) -> gpui_kit::Div {
+    h_flex()
+        .gap_3()
+        .child(div().flex_1().min_w_0().child(time))
+        .child(div().w(px(96.)).child(reason))
+        .child(div().w(px(72.)).child(size))
+        .child(h_flex().w(px(120.)).justify_end().child(action))
 }
 
 pub(crate) fn directory_size(path: &std::path::Path) -> std::io::Result<u64> {

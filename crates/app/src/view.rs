@@ -298,7 +298,7 @@ impl UniApp {
         window.open_alert_dialog(cx, move |alert, _, _| {
             let (store, id) = (store.clone(), id.clone());
             alert
-                .title(tf("restore.title", &[("when", &when)]))
+                .title(theme::dialog_title(tf("restore.title", &[("when", &when)])))
                 .description(format!("{} {}", t("restore.body"), t("settings.quit_to_restore")))
                 .confirm()
                 .ok_text(t("restore.ok"))
@@ -317,7 +317,7 @@ impl UniApp {
         window.open_alert_dialog(cx, move |alert, _, _| {
             let store = store.clone();
             alert
-                .title(t("fix.title"))
+                .title(theme::dialog_title(t("fix.title")))
                 .description(t("fix.body"))
                 .confirm()
                 .ok_text(t("fix.ok"))
@@ -421,7 +421,7 @@ impl UniApp {
                 .child(div().pt_1().text_size(rems(0.846)).text_color(muted).child(t("signin.tip")));
             let (store, expected) = (store.clone(), expected.clone());
             alert
-                .title(title)
+                .title(theme::dialog_title(title))
                 .description(description)
                 .confirm()
                 .ok_text(t("signin.ok"))
@@ -466,7 +466,7 @@ impl UniApp {
                 });
             let (store, account) = (store.clone(), account.clone());
             alert
-                .title(tf("switch.confirm_title", &[("account", &name)]))
+                .title(theme::dialog_title(tf("switch.confirm_title", &[("account", &name)])))
                 .description(description)
                 .confirm()
                 .ok_text(t("account.switch"))
@@ -485,7 +485,7 @@ impl UniApp {
         window.open_alert_dialog(cx, move |alert, _, _| {
             let (store, account) = (store.clone(), account.clone());
             alert
-                .title(tf("remove.title", &[("account", &name)]))
+                .title(theme::dialog_title(tf("remove.title", &[("account", &name)])))
                 .description(t("remove.body"))
                 .confirm()
                 .ok_text(t("remove.ok"))
@@ -550,7 +550,7 @@ impl UniApp {
             let (input, problem, store, account, others) =
                 (field.clone(), problem.clone(), store.clone(), account.clone(), others.clone());
             alert
-                .title(title.clone())
+                .title(theme::dialog_title(title.clone()))
                 .description(t("name.body"))
                 .child(field_and_note)
                 .confirm()
@@ -600,7 +600,8 @@ impl UniApp {
                 h_flex().p(px(3.)).gap(px(3.)).rounded(px(10.)).bg(cx.theme().muted).children((0..2).map(|index| {
                     Button::new(if index == 0 { "desktop-tab" } else { "cli-tab" })
                         .ghost()
-                        .w(px(if count > 4 { 83. } else { 113. }))
+                        // Fixed, so the tabs do not jump when the search field comes and goes.
+                        .w(px(113.))
                         .h(px(32.))
                         .label(t(if index == 0 { "page.desktop" } else { "page.cli" }))
                         .bg(if self.page == index {
@@ -665,7 +666,7 @@ impl UniApp {
         let updated =
             latest.map(|at| tf("ui.updated", &[("ago", &crate::i18n::ago(at))])).unwrap_or_else(|| t("ui.noReading"));
         TitleBar::new()
-            .h(px(52.))
+            .h(theme::TITLE_ROW)
             .bg(cx.theme().background)
             .border_color(cx.theme().border)
             .child(
