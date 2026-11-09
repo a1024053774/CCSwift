@@ -106,3 +106,13 @@ retry window has elapsed; this task does not repair or replace that credential. 
 unchecked box until real usage and reset evidence exists for all slots. Local release files
 are ready for review, not publication. Reverting this commit undoes release metadata, README,
 and archive naming changes; it does not roll back account stores or the session sync.
+
+### Final pass (2026-11-09)
+
+The run exposed a defect: the active slot read its saved `claude-swap` copy, which goes stale once
+Claude Code renews the live login. Fixed in `02a2189` (active slot reads `Claude Code-credentials`;
+test `active_account_reads_the_live_login` fails when that branch is removed). Live read through
+`cli_usage::Cache::refresh` on the real store (`work/final/live-cli-status.txt`): slot 1 (active)
+Valid 0% / 73%, slot 2 Valid 0% / 19%, slot 3 Renews on switch. Slot 1 matches `cswap status`
+(5h 0%) and the earlier oracle (0% / 73%). The usage box stays unchecked only for slot 3, whose
+stored access token has expired; reading it needs a CLI switch to slot 3, which was not done.
