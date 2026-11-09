@@ -125,8 +125,8 @@ folder. CC Same can undo that setup for you (`cc-same fix-symlinks`).
   appeared or changed since planning.
 - Fields that belong to one account (its connectors, Remote Control mirrors, published
   artifacts, pins) never travel to another.
-- Session syncing needs no network access. CLI usage requests use each stored credential with
-  Anthropic’s OAuth usage endpoint. This fork has no automatic updater.
+- Session syncing needs no network access. CLI usage requests use Anthropic’s OAuth usage endpoint with the
+  terminal’s live login for the active slot and each other slot’s stored credential. This fork has no automatic updater.
 
 ## Building from source
 
