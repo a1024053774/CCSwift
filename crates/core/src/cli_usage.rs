@@ -10,14 +10,16 @@ use std::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Problem {
     Unavailable,
-    NeedsRefresh,
+    RenewsOnSwitch,
+    Expired,
 }
 
 impl Problem {
     pub fn message(self) -> &'static str {
         match self {
             Self::Unavailable => "unavailable",
-            Self::NeedsRefresh => "needs cswap refresh",
+            Self::RenewsOnSwitch => "Renews on switch",
+            Self::Expired => "Expired",
         }
     }
 }
@@ -31,6 +33,16 @@ pub struct Reading {
 }
 
 impl Reading {
+    pub fn status(&self) -> &'static str {
+        match self.problem {
+            Some(Problem::RenewsOnSwitch) => "Renews on switch",
+            Some(Problem::Expired) => "Expired",
+            Some(Problem::Unavailable) => "Unknown",
+            None if self.usage.is_some() => "Valid",
+            None => "Unknown",
+        }
+    }
+
     pub fn reset_label(&self, window: usize) -> String {
         self.resets_at[window]
             .as_deref()
@@ -47,7 +59,7 @@ impl Reading {
 /// Lives with the app store, so reopening the window does not reset the throttle.
 #[derive(Clone, Default)]
 pub struct Cache {
-    pub readings: BTreeMap<String, Reading>,
+    pub readings: BTreeMap<u64, Reading>,
 }
 
 impl Cache {
@@ -57,7 +69,7 @@ impl Cache {
 
     fn refresh_with(&mut self, accounts: &[Account], mut fetch: impl FnMut(&Account) -> Result<Reading, Problem>) {
         for account in accounts {
-            let entry = self.readings.entry(account.email.clone()).or_default();
+            let entry = self.readings.entry(account.slot).or_default();
             if entry.attempted.is_some_and(|at| at.elapsed() < Duration::from_secs(60)) {
                 continue;
             }
@@ -77,26 +89,13 @@ impl Cache {
 fn fetch(account: &Account) -> Result<Reading, Problem> {
     let mut command = Command::new("/usr/bin/security");
     command.arg("find-generic-password");
-    if account.active {
-        let user = Command::new("/usr/bin/id").arg("-un").output().map_err(|_| Problem::Unavailable)?;
-        if !user.status.success() {
-            return Err(Problem::Unavailable);
-        }
-        let user = std::str::from_utf8(&user.stdout).map_err(|_| Problem::Unavailable)?.trim();
-        command.args(["-s", "Claude Code-credentials", "-a", user]);
-    } else {
-        command.args(["-s", "claude-swap", "-a", &format!("account-{}-{}", account.slot, account.email)]);
-    }
+    command.args(["-s", "claude-swap", "-a", &format!("account-{}-{}", account.slot, account.email)]);
     let output = command.arg("-w").output().map_err(|_| Problem::Unavailable)?;
     if !output.status.success() {
         return Err(Problem::Unavailable);
     }
     let data: Value = serde_json::from_slice(&output.stdout).map_err(|_| Problem::Unavailable)?;
-    let oauth = &data["claudeAiOauth"];
-    if oauth["expiresAt"].as_f64().is_some_and(|at| at <= fsx::now_secs() * 1000.0) {
-        return Err(Problem::NeedsRefresh);
-    }
-    let token = oauth["accessToken"].as_str().filter(|s| !s.is_empty()).ok_or(Problem::NeedsRefresh)?;
+    let token = access_token(&data, fsx::now_secs())?;
     let _ = rustls::crypto::ring::default_provider().install_default();
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(5))
@@ -110,14 +109,29 @@ fn fetch(account: &Account) -> Result<Reading, Problem> {
         .header("User-Agent", "claude-swap/1.0")
         .send()
         .map_err(|_| Problem::Unavailable)?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        return Err(Problem::NeedsRefresh);
-    }
-    if !response.status().is_success() {
-        return Err(Problem::Unavailable);
-    }
+    response_status(response.status().as_u16())?;
     let bytes = response.bytes().map_err(|_| Problem::Unavailable)?;
     parse(&bytes, fsx::now_secs())
+}
+
+fn access_token(data: &Value, now: f64) -> Result<&str, Problem> {
+    let oauth = &data["claudeAiOauth"];
+    if oauth["expiresAt"].as_f64().is_some_and(|at| at <= now * 1000.0) {
+        return Err(if oauth["refreshToken"].as_str().is_some_and(|s| !s.is_empty()) {
+            Problem::RenewsOnSwitch
+        } else {
+            Problem::Unavailable
+        });
+    }
+    oauth["accessToken"].as_str().filter(|s| !s.is_empty()).ok_or(Problem::Unavailable)
+}
+
+fn response_status(status: u16) -> Result<(), Problem> {
+    match status {
+        200..=299 => Ok(()),
+        401 | 403 => Err(Problem::Expired),
+        _ => Err(Problem::Unavailable),
+    }
 }
 
 fn parse(bytes: &[u8], at: f64) -> Result<Reading, Problem> {
@@ -147,13 +161,38 @@ fn parse(bytes: &[u8], at: f64) -> Result<Reading, Problem> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn status_classification_gates_network_on_expired_access() {
+        let data =
+            serde_json::json!({"claudeAiOauth":{"accessToken":"synthetic","expiresAt":1000,"refreshToken":"refresh"}});
+        // fetch uses this gate before constructing its HTTP client.
+        assert_eq!(access_token(&data, 2.), Err(Problem::RenewsOnSwitch));
+        assert_eq!(access_token(&data, 0.), Ok("synthetic"));
+        assert_eq!(response_status(401), Err(Problem::Expired));
+        assert_eq!(response_status(403), Err(Problem::Expired));
+        assert_eq!(response_status(429), Err(Problem::Unavailable));
+        assert_eq!(Reading::default().status(), "Unknown");
+    }
+
     // Contract failures: repeat requests within 60s (including duplicate emails and failures),
     // lost last reading, error bodies treated as zero, nullable windows treated as zero.
     #[test]
     fn throttle_and_offline_preserve_last_reading() {
         let accounts = vec![
-            Account { slot: 2, email: "ada@example.com".into(), organization: "".into(), active: true },
-            Account { slot: 3, email: "ada@example.com".into(), organization: "".into(), active: false },
+            Account {
+                slot: 2,
+                email: "ada@example.com".into(),
+                organization: "".into(),
+                organization_uuid: "".into(),
+                active: true,
+            },
+            Account {
+                slot: 3,
+                email: "ada@example.com".into(),
+                organization: "".into(),
+                organization_uuid: "".into(),
+                active: false,
+            },
         ];
         let mut cache = Cache::default();
         let mut calls = 0;
@@ -168,8 +207,8 @@ mod tests {
             calls += 1;
             Err(Problem::Unavailable)
         });
-        assert_eq!(calls, 1, "open + refresh + duplicate slot must make one request");
-        let entry = cache.readings.get_mut("ada@example.com").unwrap();
+        assert_eq!(calls, 2, "each slot has independent credentials; reopening is throttled");
+        let entry = cache.readings.get_mut(&2).unwrap();
         entry.attempted = Some(Instant::now() - Duration::from_secs(61));
         cache.refresh_with(&accounts, |_| {
             calls += 1;
@@ -179,8 +218,8 @@ mod tests {
             calls += 1;
             Err(Problem::Unavailable)
         });
-        assert_eq!(calls, 2, "failed requests must also be throttled");
-        let entry = &cache.readings["ada@example.com"];
+        assert_eq!(calls, 3, "failed requests must also be throttled");
+        let entry = &cache.readings[&2];
         assert_eq!(entry.usage, Some(Usage { at: 100.0, five_hour: Some(12.0), weekly: Some(34.0) }));
         assert_eq!(entry.problem, Some(Problem::Unavailable));
     }
@@ -204,6 +243,7 @@ mod tests {
     #[test]
     fn response_percentages_and_nullable_windows() {
         let result = parse(br#"{"five_hour":{"utilization":12.5},"seven_day":{"utilization":64}}"#, 123.).unwrap();
+        assert_eq!(result.status(), "Valid");
         assert_eq!(result.usage.unwrap(), Usage { at: 123., five_hour: Some(12.5), weekly: Some(64.) });
         assert_eq!(
             parse(br#"{"five_hour":{"utilization":null},"seven_day":null}"#, 1.).unwrap().usage.unwrap().five_hour,

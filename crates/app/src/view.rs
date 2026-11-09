@@ -442,6 +442,7 @@ impl UniApp {
                         }
                         if this.page == 1 {
                             this.refresh_cli(cx);
+                            this.store.update(cx, |s, cx| s.refresh_usage(cx));
                         }
                         cx.notify();
                     })),
@@ -472,7 +473,17 @@ impl UniApp {
         }
         let mut list = surface(cx).p_3().gap_4();
         for (email, (desktop, _, cli)) in rows {
-            let reading = cli.then(|| store.cli_usage.readings.get(&email)).flatten();
+            let reading = cli
+                .then(|| {
+                    store.cli_accounts.as_ref().and_then(|r| r.as_ref().ok()).and_then(|accounts| {
+                        accounts
+                            .iter()
+                            .filter(|a| a.email == email)
+                            .filter_map(|a| store.cli_usage.readings.get(&a.slot))
+                            .max_by_key(|r| r.usage.map(|u| u.at as i64))
+                    })
+                })
+                .flatten();
             let cli_usage = reading.and_then(|r| r.usage);
             let (source, usage) =
                 if cli_usage.is_some() { (t("page.cli"), cli_usage) } else { (t("page.desktop"), desktop) };
@@ -521,6 +532,9 @@ impl UniApp {
             Some(Ok(accounts)) if !accounts.is_empty() => {
                 for account in accounts {
                     let slot = account.slot;
+                    let reading = store.cli_usage.readings.get(&slot);
+                    let status = reading.map(|r| r.status()).unwrap_or("Unknown");
+                    let relogin = matches!(status, "Expired" | "Renews on switch");
                     list = list.child(
                         h_flex()
                             .px_3()
@@ -544,31 +558,45 @@ impl UniApp {
                                                     .child(account.organization.clone()),
                                             )
                                         },
-                                    ),
+                                    )
+                                    .child(div().text_size(rems(0.846)).text_color(muted).child(status)),
                             )
-                            .when(!account.active, |row| {
-                                row.child(
-                                    Button::new(SharedString::from(format!("cli-switch-{slot}")))
-                                        .small()
-                                        .ghost()
-                                        .label(t(if store.cli_switching == Some(slot) {
-                                            "account.switching"
-                                        } else {
-                                            "account.switch"
-                                        }))
-                                        .disabled(store.cli_switching.is_some())
-                                        .on_click(cx.listener(move |this, _, _, cx| {
-                                            this.store.update(cx, |store, cx| store.switch_cli(slot, cx));
-                                        })),
-                                )
-                            })
-                            .when(account.active, |row| {
-                                row.child(
-                                    Tag::secondary().small().rounded_full().child(
-                                        h_flex().gap_1p5().child(dot(cx.theme().primary)).child(t("cli.active")),
-                                    ),
-                                )
-                            }),
+                            .child(
+                                v_flex()
+                                    .gap_1()
+                                    .items_end()
+                                    .when(relogin, |row| {
+                                        row.child(
+                                            Button::new(SharedString::from(format!("cli-relogin-{slot}")))
+                                                .small()
+                                                .label("Sign in again")
+                                                .on_click(cx.listener(move |this, _, window, cx| {
+                                                    crate::cli_login::open(this.store.clone(), Some(slot), window, cx)
+                                                })),
+                                        )
+                                    })
+                                    .when(!account.active && status != "Expired", |row| {
+                                        row.child(
+                                            Button::new(SharedString::from(format!("cli-switch-{slot}")))
+                                                .small()
+                                                .ghost()
+                                                .label(t(if store.cli_switching == Some(slot) {
+                                                    "account.switching"
+                                                } else {
+                                                    "account.switch"
+                                                }))
+                                                .disabled(store.cli_switching.is_some())
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    this.store.update(cx, |store, cx| store.switch_cli(slot, cx));
+                                                })),
+                                        )
+                                    })
+                                    .when(account.active, |row| {
+                                        row.child(Tag::secondary().small().rounded_full().child(
+                                            h_flex().gap_1p5().child(dot(cx.theme().primary)).child(t("cli.active")),
+                                        ))
+                                    }),
+                            ),
                     );
                 }
             }
@@ -581,7 +609,16 @@ impl UniApp {
                 list = list.child(div().px_3().py_3().text_color(muted).child(message));
             }
         }
-        v_flex().p_5().gap_2().child(section_label(t("cli.title"), cx)).child(list).into_any_element()
+        v_flex()
+            .p_5()
+            .gap_2()
+            .child(h_flex().justify_between().child(section_label(t("cli.title"), cx)).child(
+                Button::new("add-cli").small().label("+ Add").on_click(
+                    cx.listener(|this, _, window, cx| crate::cli_login::open(this.store.clone(), None, window, cx)),
+                ),
+            ))
+            .child(list)
+            .into_any_element()
     }
 
     fn render_title_bar(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -1085,6 +1122,7 @@ impl Render for UniApp {
                     this.store.update(cx, |s, cx| s.refresh_usage(cx));
                 } else if this.page == 1 {
                     this.refresh_cli(cx);
+                    this.store.update(cx, |s, cx| s.refresh_usage(cx));
                 } else {
                     this.store.update(cx, |s, cx| s.refresh(cx));
                 }

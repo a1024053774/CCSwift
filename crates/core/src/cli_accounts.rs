@@ -9,6 +9,7 @@ pub struct Account {
     pub slot: u64,
     pub email: String,
     pub organization: String,
+    pub organization_uuid: String,
     pub active: bool,
 }
 
@@ -49,6 +50,7 @@ pub fn list(home: &Path) -> Result<Vec<Account>> {
                 slot,
                 email: account["email"].as_str().unwrap_or("unknown").to_owned(),
                 organization: account["organizationName"].as_str().unwrap_or("").to_owned(),
+                organization_uuid: account["organizationUuid"].as_str().unwrap_or("").to_owned(),
                 active: active == Some(&key),
             })
         })
@@ -85,9 +87,27 @@ mod tests {
         assert_eq!(
             list(home.path()).unwrap(),
             vec![
-                Account { slot: 3, email: "third@example.com".into(), organization: "".into(), active: false },
-                Account { slot: 1, email: "same@example.com".into(), organization: "Personal".into(), active: true },
-                Account { slot: 2, email: "same@example.com".into(), organization: "Work".into(), active: false },
+                Account {
+                    slot: 3,
+                    email: "third@example.com".into(),
+                    organization: "".into(),
+                    organization_uuid: "".into(),
+                    active: false
+                },
+                Account {
+                    slot: 1,
+                    email: "same@example.com".into(),
+                    organization: "Personal".into(),
+                    organization_uuid: "personal".into(),
+                    active: true
+                },
+                Account {
+                    slot: 2,
+                    email: "same@example.com".into(),
+                    organization: "Work".into(),
+                    organization_uuid: "work".into(),
+                    active: false
+                },
             ]
         );
         assert_eq!(fs::read_to_string(home.path().join(".claude-swap-backup/sequence.json")).unwrap(), STORE);
@@ -116,3 +136,7 @@ mod tests {
 #[path = "cli_accounts_switch.rs"]
 mod switching;
 pub use switching::switch;
+
+#[path = "cli_accounts_capture.rs"]
+mod capture;
+pub use capture::{add_current, current_login, update_slot, AddResult, CurrentLogin};

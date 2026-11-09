@@ -21,11 +21,16 @@ The window has three pages: **Desktop | CLI | Usage**.
   restarts Claude Desktop signed in to the other account.
 - **CLI**: the accounts in claude-swap's store (`~/.claude-swap-backup`), in slot order. Click
   **Switch** (or use the tray's *CLI* submenu) to change the account the `claude` command uses,
-  exactly as `cswap switch <n>` would. Claude Desktop is not touched. Add accounts with `cswap add`.
+  using the same store as `cswap`. Claude Desktop is not touched. **+ Add** opens a dialog
+  that detects the terminal login after `claude auth login`. Save a new account or choose
+  **Update login** for an existing slot. **Sign in again** opens the same flow for a specific
+  slot and refuses a different email or organization. `cswap` does not need to be installed.
+  Each slot shows Valid, Renews on switch, Expired, or Unknown from its stored credential
+  and latest usage request; the app never refreshes tokens.
 - **Usage**: one row per account (joined by email) with the 5-hour and weekly bars, when each
   window resets, and when the reading was taken. CLI numbers come from the OAuth usage endpoint
-  with each account's stored token (on open and on Refresh, at most once a minute per account);
-  Desktop numbers come from Claude Desktop's local history. Tokens are never refreshed and no
+  with each account's stored token. Reads are cached for a minute; adding, updating, or
+  switching a CLI login clears that cache. Desktop numbers come from Claude Desktop's local history. Tokens are never refreshed and no
   account store is written by this page.
 
 Desktop and CLI are switched independently. Light and dark follow the system, in plain black and white.
@@ -39,7 +44,7 @@ Download `CCSwift-<version>-macos-arm64.dmg` from
   **System Settings → Privacy & Security → Open Anyway** after checking the source.
 - It shares CC Same's state folder (`~/Library/Application Support/cc-same`), so Desktop logins
   you saved in CC Same carry over. Run only one of CC Same and CCSwift at a time.
-- It does not update itself. CLI switching needs `cswap` accounts already added.
+- It does not update itself. CLI accounts can be added in the app.
 - Only tested on one Apple Silicon Mac. Windows and Linux builds of the fork are not provided.
 
 ## Build

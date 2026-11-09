@@ -8,12 +8,19 @@ use std::{
     process::{Command, Stdio},
 };
 
-const ACTIVE: &str = "Claude Code-credentials";
+pub(super) const ACTIVE: &str = "Claude Code-credentials";
 
 /// Switch the macOS CLI login, saving the outgoing credential first. Run off the UI thread.
 pub fn switch(home: &Path, slot: u64) -> Result<()> {
     ensure!(cfg!(target_os = "macos"), "CLI switching is only available on macOS");
-    let user = std::env::var("USER")
+    let user = keychain_user()?;
+    #[cfg(unix)]
+    let _locks = Locks::acquire(home)?;
+    switch_with(home, slot, &user, security)
+}
+
+pub(super) fn keychain_user() -> Result<String> {
+    std::env::var("USER")
         .ok()
         .filter(|s| !s.is_empty())
         .or_else(|| {
@@ -25,10 +32,7 @@ pub fn switch(home: &Path, slot: u64) -> Result<()> {
                 .and_then(|o| String::from_utf8(o.stdout).ok())
                 .map(|s| s.trim().to_owned())
         })
-        .context("Cannot determine the Keychain account")?;
-    #[cfg(unix)]
-    let _locks = Locks::acquire(home)?;
-    switch_with(home, slot, &user, security)
+        .context("Cannot determine the Keychain account")
 }
 
 // The I/O boundary also lets fixture tests refuse a write without touching real credentials.
@@ -49,7 +53,7 @@ fn switch_with(
     let current = accounts
         .iter()
         .find(|a| a.active)
-        .context("Current CLI account is not in claude-swap; run cswap before switching")?;
+        .context("Current CLI account is not in claude-swap; add it before switching")?;
     let config_path = home.join(".claude.json");
     let original_config = fs::read(&config_path)?;
     let mut config: Value = serde_json::from_slice(&original_config)?;
@@ -108,17 +112,17 @@ fn switch_with(
     Ok(())
 }
 
-fn credential(text: &str) -> Result<Value> {
+pub(super) fn credential(text: &str) -> Result<Value> {
     // Do not include the JSON/parser input in an error; it contains credentials.
     let data: Value = serde_json::from_str(text).map_err(|_| anyhow::anyhow!("Invalid CLI credential"))?;
     ensure!(
         data["claudeAiOauth"]["accessToken"].as_str().is_some_and(|s| !s.is_empty()),
-        "Missing CLI OAuth credential; run cswap to refresh"
+        "Missing CLI OAuth credential; sign in with claude auth login"
     );
     Ok(data)
 }
 
-fn security(service: &str, account: &str, value: Option<&str>) -> Result<String> {
+pub(super) fn security(service: &str, account: &str, value: Option<&str>) -> Result<String> {
     if let Some(value) = value {
         ensure!(!account.contains(['\n', '\r']), "Invalid Keychain account");
         let quote = |s: &str| format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""));
@@ -146,7 +150,7 @@ fn security(service: &str, account: &str, value: Option<&str>) -> Result<String>
 }
 
 #[cfg(unix)]
-struct Locks {
+pub(super) struct Locks {
     _store: fs::File,
     directories: Vec<std::path::PathBuf>,
     stop: std::sync::mpsc::Sender<()>,
@@ -155,7 +159,7 @@ struct Locks {
 
 #[cfg(unix)]
 impl Locks {
-    fn acquire(home: &Path) -> Result<Self> {
+    pub(super) fn acquire(home: &Path) -> Result<Self> {
         use std::os::fd::AsRawFd;
         let store = fs::OpenOptions::new()
             .write(true)

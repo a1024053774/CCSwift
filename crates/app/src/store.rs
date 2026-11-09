@@ -79,6 +79,7 @@ pub struct Store {
     pub cli_accounts: Option<Result<Vec<cc_same_core::cli_accounts::Account>, String>>,
     pub cli_switching: Option<u64>,
     cli_loading: bool,
+    cli_usage_revision: u64,
     pub cli_usage: cc_same_core::cli_usage::Cache,
     pub usage_loading: bool,
     pub usage_error: Option<String>,
@@ -116,6 +117,7 @@ impl Store {
             cli_switching: None,
             cli_loading: false,
             cli_usage: Default::default(),
+            cli_usage_revision: 0,
             usage_loading: false,
             usage_error: None,
             open_at_login: false,
@@ -192,6 +194,7 @@ impl Store {
             return;
         }
         self.cli_loading = true;
+        let revision = self.cli_usage_revision;
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
@@ -203,11 +206,22 @@ impl Store {
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.cli_loading = false;
+                if revision != this.cli_usage_revision {
+                    this.refresh_cli(cx);
+                    return;
+                }
                 this.cli_accounts = Some(result);
                 cx.notify();
             });
         })
         .detach();
+    }
+
+    pub fn invalidate_cli_usage(&mut self, cx: &mut Context<Self>) {
+        self.cli_usage_revision += 1;
+        self.cli_usage = Default::default();
+        self.refresh_cli(cx);
+        self.refresh_usage(cx);
     }
 
     pub fn refresh_usage(&mut self, cx: &mut Context<Self>) {
@@ -216,6 +230,7 @@ impl Store {
         }
         self.usage_loading = true;
         self.refresh(cx);
+        let revision = self.cli_usage_revision;
         let mut cache = self.cli_usage.clone();
         cx.notify();
         cx.spawn(async move |this, cx| {
@@ -233,6 +248,11 @@ impl Store {
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
+                if revision != this.cli_usage_revision {
+                    this.usage_loading = false;
+                    this.refresh_usage(cx);
+                    return;
+                }
                 this.cli_usage = cache;
                 this.usage_error = accounts.as_ref().err().cloned();
                 this.cli_accounts = Some(accounts);
@@ -261,7 +281,11 @@ impl Store {
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.cli_switching = None;
-                this.refresh_cli(cx);
+                if result.is_ok() {
+                    this.invalidate_cli_usage(cx);
+                } else {
+                    this.refresh_cli(cx);
+                }
                 cx.emit(StoreEvent::Done(result.map(|()| format!("CLI switched to account {slot}"))));
                 cx.notify();
             });
