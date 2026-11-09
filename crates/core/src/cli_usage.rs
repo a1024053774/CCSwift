@@ -86,11 +86,31 @@ impl Cache {
     }
 }
 
+/// The Keychain item that holds `account`'s current login. The active account's saved copy goes
+/// stale once Claude Code renews the live login (claude-swap only saves on switch), so the
+/// active account reads the live item, as `claude` itself does.
+fn credential_item(account: &Account, user: &str) -> (&'static str, String) {
+    if account.active {
+        ("Claude Code-credentials", user.to_string())
+    } else {
+        ("claude-swap", format!("account-{}-{}", account.slot, account.email))
+    }
+}
+
+fn os_user() -> Result<String, Problem> {
+    let output = Command::new("/usr/bin/id").arg("-un").output().map_err(|_| Problem::Unavailable)?;
+    if !output.status.success() {
+        return Err(Problem::Unavailable);
+    }
+    String::from_utf8(output.stdout).map(|s| s.trim().to_string()).map_err(|_| Problem::Unavailable)
+}
+
 fn fetch(account: &Account) -> Result<Reading, Problem> {
-    let mut command = Command::new("/usr/bin/security");
-    command.arg("find-generic-password");
-    command.args(["-s", "claude-swap", "-a", &format!("account-{}-{}", account.slot, account.email)]);
-    let output = command.arg("-w").output().map_err(|_| Problem::Unavailable)?;
+    let (service, item) = credential_item(account, &os_user()?);
+    let output = Command::new("/usr/bin/security")
+        .args(["find-generic-password", "-s", service, "-a", &item, "-w"])
+        .output()
+        .map_err(|_| Problem::Unavailable)?;
     if !output.status.success() {
         return Err(Problem::Unavailable);
     }
@@ -172,6 +192,22 @@ mod tests {
         assert_eq!(response_status(403), Err(Problem::Expired));
         assert_eq!(response_status(429), Err(Problem::Unavailable));
         assert_eq!(Reading::default().status(), "Unknown");
+    }
+
+    // Fails if the active account reads its saved copy: Claude Code renews only the live login,
+    // so the saved copy expires hours before the account does.
+    #[test]
+    fn active_account_reads_the_live_login() {
+        let mut account = Account {
+            slot: 2,
+            email: "ada@example.com".into(),
+            organization: "".into(),
+            organization_uuid: "".into(),
+            active: true,
+        };
+        assert_eq!(credential_item(&account, "ada"), ("Claude Code-credentials", "ada".to_string()));
+        account.active = false;
+        assert_eq!(credential_item(&account, "ada"), ("claude-swap", "account-2-ada@example.com".to_string()));
     }
 
     // Contract failures: repeat requests within 60s (including duplicate emails and failures),

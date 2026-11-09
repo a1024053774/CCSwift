@@ -2444,6 +2444,10 @@ _version: 2
   en: "Latest %{when} · %{n} kept"
   zh-CN: "最近一次 %{when} · 保留 %{n} 份"
 
+"ui.noBackups":
+  en: "No backups yet"
+  zh-CN: "还没有备份"
+
 "ui.manage":
   en: "Manage"
   zh-CN: "管理备份"

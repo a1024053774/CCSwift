@@ -807,8 +807,10 @@ impl UniApp {
             .and_then(|o| o.last_sync.as_ref())
             .map(|s| tf("ui.lastSync", &[("ago", &crate::i18n::ago(s.at))]))
             .unwrap_or_else(|| t("ui.notStarted"));
-        let latest = store.snapshots.last().map(|s| model::snapshot_when(&s.id)).unwrap_or_else(|| t("ui.notStarted"));
-        let backup = tf("ui.backupLine", &[("when", &latest), ("n", &store.snapshots.len())]);
+        let backup = match store.snapshots.last() {
+            Some(s) => tf("ui.backupLine", &[("when", &model::snapshot_when(&s.id)), ("n", &store.snapshots.len())]),
+            None => t("ui.noBackups"),
+        };
         let line =
             |icon, title, detail, action: AnyElement| {
                 h_flex()
