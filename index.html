@@ -8,7 +8,8 @@
 <meta property="og:title" content="CCSwift">
 <meta property="og:description" content="Switch Claude Desktop and Claude Code accounts separately on macOS, with every account's usage in one place.">
 <meta property="og:image" content="assets/window-light-en.png">
-<link rel="icon" href="assets/icon.png">
+<link rel="icon" href="assets/icon.png" media="(prefers-color-scheme: light)">
+<link rel="icon" href="assets/icon-dark.png" media="(prefers-color-scheme: dark)">
 <style>
 :root{
   --bg:#f7f2ee; --surface:#fffcfa; --ink:#2b2522; --muted:#6f6660; --line:rgba(80,55,40,.14);
@@ -92,7 +93,7 @@ html[lang="zh-CN"] [data-lang-show="zh"],html[lang="en"] [data-lang-show="en"]{d
 </head>
 <body>
 <nav class="top"><div class="bar glass">
-  <a class="brand" href="#"><img src="assets/icon.png" alt="">CCSwift</a>
+  <a class="brand" href="#"><img class="only-light" src="assets/icon.png" alt=""><img class="only-dark" src="assets/icon-dark.png" alt="">CCSwift</a>
   <div class="links">
     <a class="hide-s" href="#features"><span data-lang-show="zh">功能</span><span data-lang-show="en">Features</span></a>
     <a class="hide-s" href="#install"><span data-lang-show="zh">安装</span><span data-lang-show="en">Install</span></a>
