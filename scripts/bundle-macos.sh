@@ -34,7 +34,13 @@ app="$out/CCSwift.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp target/release/cc-same-app "$app/Contents/MacOS/CCSwift"
-cp crates/app/resources/macos/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
+# AppIcon.icon (Icon Composer) has light, dark and tinted art; actool (Xcode 26+) compiles it into
+# Assets.car for macOS 26+ and AppIcon.icns for older systems.
+icon_plist="$(mktemp "${TMPDIR:-/tmp}/ccswift-icon.XXXXXX")"
+xcrun actool crates/app/resources/macos/AppIcon.icon --compile "$app/Contents/Resources" --platform macosx \
+  --minimum-deployment-target 11.0 --app-icon AppIcon --output-partial-info-plist "$icon_plist" >/dev/null
+rm -f -- "$icon_plist"
+test -f "$app/Contents/Resources/Assets.car" && test -f "$app/Contents/Resources/AppIcon.icns"
 sed "s/__VERSION__/$version/g" crates/app/resources/macos/Info.plist > "$app/Contents/Info.plist"
 xattr -cr "$app"
 

@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="assets/icon.png" width="112" alt="">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/icon-dark.png">
+    <img src="assets/icon.png" width="112" alt="">
+  </picture>
 </p>
 
 <h1 align="center">CCSwift</h1>
