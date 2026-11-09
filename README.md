@@ -2,14 +2,14 @@
   <img src="assets/icon.png" width="112" alt="">
 </p>
 
-<h1 align="center">CC Same Plus</h1>
+<h1 align="center">CCSwift</h1>
 
 <p align="center">
   One macOS menu-bar app to switch Claude accounts, separately for Claude Desktop and for Claude Code (CLI),
   with every account's plan usage in one place.
 </p>
 
-CC Same Plus is a fork of [songkeys/cc-same](https://github.com/songkeys/cc-same). It keeps CC Same's
+CCSwift is a fork of [songkeys/cc-same](https://github.com/songkeys/cc-same). It keeps CC Same's
 Desktop session sync and one-click Desktop switching unchanged, and adds the CLI account switching of
 [realiti4/claude-swap](https://github.com/realiti4/claude-swap) as a GUI. Thanks to both projects.
 
@@ -32,13 +32,13 @@ Desktop and CLI are switched independently. Light and dark follow the system, in
 
 ## Install (macOS, Apple Silicon)
 
-Download `CC-Same-Plus-<version>-macos-arm64.dmg` from
-[Releases](https://github.com/a1024053774/cc-same/releases) and drag **CC Same Plus** to Applications.
+Download `CCSwift-<version>-macos-arm64.dmg` from
+[Releases](https://github.com/a1024053774/CCSwift/releases) and drag **CCSwift** to Applications.
 
 - The build is **ad-hoc signed, not notarized**. If macOS blocks it, use
   **System Settings → Privacy & Security → Open Anyway** after checking the source.
 - It shares CC Same's state folder (`~/Library/Application Support/cc-same`), so Desktop logins
-  you saved in CC Same carry over. Run only one of CC Same and CC Same Plus at a time.
+  you saved in CC Same carry over. Run only one of CC Same and CCSwift at a time.
 - It does not update itself. CLI switching needs `cswap` accounts already added.
 - Only tested on one Apple Silicon Mac. Windows and Linux builds of the fork are not provided.
 
@@ -47,7 +47,7 @@ Download `CC-Same-Plus-<version>-macos-arm64.dmg` from
 ```bash
 cargo test --workspace
 cargo test --manifest-path crates/app/Cargo.toml
-scripts/bundle-macos.sh          # dist/CC Same Plus.app, .dmg, .zip
+scripts/bundle-macos.sh          # dist/CCSwift.app, .dmg, .zip
 ```
 
 ## Using the command line

@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>CC Same Plus</string>
+    <string>CCSwift</string>
     <key>CFBundleDisplayName</key>
-    <string>CC Same Plus</string>
+    <string>CCSwift</string>
     <key>CFBundleIdentifier</key>
-    <string>io.github.a1024053774.cc-same-plus</string>
+    <string>io.github.a1024053774.ccswift</string>
     <key>CFBundleExecutable</key>
-    <string>CC Same Plus</string>
+    <string>CCSwift</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundlePackageType</key>
