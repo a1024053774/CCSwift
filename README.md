@@ -9,6 +9,11 @@
   with every account's plan usage in one place.
 </p>
 
+<p align="center">
+  <a href="https://a1024053774.github.io/CCSwift/">Website</a> ·
+  <a href="https://github.com/a1024053774/CCSwift/releases/latest">Download</a>
+</p>
+
 CCSwift is a fork of [songkeys/cc-same](https://github.com/songkeys/cc-same). It keeps CC Same's
 Desktop session sync and one-click Desktop switching unchanged, and adds the CLI account switching of
 [realiti4/claude-swap](https://github.com/realiti4/claude-swap) in a standalone app; `cswap` is not required.
