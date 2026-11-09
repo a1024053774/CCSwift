@@ -2,8 +2,8 @@
 id: T-010
 title: Monochrome look, reset times, own app identity
 type: build
-status: open
-blocked_by: [T-009]
+status: out-of-scope
+blocked_by: []
 claimed_by:
 supersedes:
 ---
@@ -61,3 +61,5 @@ All artifacts are local under `work/T-010/` (ignored by the existing user `.giti
 - `git diff --check`: PASS (`diff-check.txt`). `python3 /Users/luckye/.claude/skills/project-map/scripts/project_map.py status --root .`: result in `project-map-status.txt`.
 
 Works: monochrome pages, reset retention and rendering, renamed release artifacts, and the real CLI round trip have direct evidence. No regression: both workspace tests and clippy pass; Desktop saved-login metadata is unchanged. Risk / undo: complete live usage agreement is unverified due to HTTP 429 and differing cached reset clocks; the ticket stays open. Revert this commit to undo product changes. The original installed app remains unchanged, and the starting CLI slot and appearance preference are restored.
+
+Out of scope 2026-11-09: shipped in 0.2.0; the one unchecked usage comparison moves to T-014, and the monochrome look is replaced by T-011.

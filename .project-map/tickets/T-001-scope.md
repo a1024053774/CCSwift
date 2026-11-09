@@ -2,7 +2,7 @@
 id: T-001
 title: Scope
 type: decide
-status: closed
+status: superseded
 blocked_by: []
 claimed_by:
 supersedes:
