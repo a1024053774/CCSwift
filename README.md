@@ -15,10 +15,14 @@ Desktop session sync and one-click Desktop switching unchanged, and adds the CLI
 
 ## What it does
 
-The window has three pages: **Desktop | CLI | Usage**.
+The 720×660 window has two tabs: **Desktop | CLI**, with usage in every account row.
 
-- **Desktop**: CC Same as it is. Local Code sessions stay identical across accounts; switching
-  restarts Claude Desktop signed in to the other account.
+- **Desktop**: local Code sessions stay identical across accounts; switching restarts Claude
+  Desktop signed in to the other account. Session sync has a manual action and an opt-in
+  background switch. **Backups** lists local snapshots with their size and source, offers
+  **Back up now**, restore confirmation (quit Claude first), Reveal in Finder, and retention
+  of 10, 20, or 50 snapshots. Automatic snapshots happen during sync at the configured interval
+  (one hour by default), and before restore; the baseline is always kept.
 - **CLI**: the accounts in claude-swap's store (`~/.claude-swap-backup`), in slot order. Click
   **Switch** (or use the tray's *CLI* submenu) to change the account the `claude` command uses,
   using the same store as `cswap`. Claude Desktop is not touched. **+ Add** opens a dialog
@@ -27,13 +31,18 @@ The window has three pages: **Desktop | CLI | Usage**.
   slot and refuses a different email or organization. `cswap` does not need to be installed.
   Each slot shows Valid, Renews on switch, Expired, or Unknown from its stored credential
   and latest usage request; the app never refreshes tokens.
-- **Usage**: one row per account (joined by email) with the 5-hour and weekly bars, when each
-  window resets, and when the reading was taken. CLI numbers come from the OAuth usage endpoint
-  with each account's stored token. Reads are cached for a minute; adding, updating, or
-  switching a CLI login clears that cache. Desktop numbers come from Claude Desktop's local history. Tokens are never refreshed and no
-  account store is written by this page.
+- **Usage in each row**: 5-hour and weekly block bars, with orange at 80% and above. Desktop
+  rows prefer successful CLI readings for the same email, otherwise Claude Desktop’s local
+  history. CLI readings include reset times from the OAuth usage endpoint and are cached for
+  a minute; add, update, or switch clears the cache. Refresh never writes credentials.
+  Search appears above four accounts; sorting puts the highest 5-hour usage first.
+  Unknown plan names and reset times display “—”; CLI rows show their real slot number.
 
-Desktop and CLI are switched independently. Light and dark follow the system, in plain black and white.
+Desktop and CLI are switched independently. The white and black themes use warm greys and
+Claude orange, with Times New Roman for English and Songti SC for Simplified Chinese. Other
+languages fall back to English. The optional Claude mark is read from the installed Claude.app
+at runtime. Usage fetches start after the first frame; Keychain and network work runs off the
+UI thread.
 
 ## Install (macOS, Apple Silicon)
 
@@ -105,13 +114,14 @@ folder. CC Same can undo that setup for you (`cc-same fix-symlinks`).
 
 - A copy-on-write snapshot of every index is taken before the first change (kept forever) and at
   most hourly afterwards; `restore` puts any of them back.
-- Nothing is deleted: anything removed or replaced goes to a trash folder for 30 days.
+- Session records removed or replaced by sync go to a trash folder for 30 days. Rolling
+  snapshots are pruned to the configured retention limit; the baseline is kept.
 - Writes are atomic, keep file times, never follow symlinks, and never overwrite a file that
   appeared or changed since planning.
 - Fields that belong to one account (its connectors, Remote Control mirrors, published
   artifacts, pins) never travel to another.
-- Syncing needs no network access: everything happens on your machine. The app only goes online
-  to ask GitHub for a new version once a day and to download it; Settings › Updates turns that off.
+- Session syncing needs no network access. CLI usage requests use each stored credential with
+  Anthropic’s OAuth usage endpoint. This fork has no automatic updater.
 
 ## Building from source
 

@@ -437,6 +437,7 @@ pub fn snapshot_reason(reason: &str, baseline: bool) -> String {
             "baseline" => "snapshot.first",
             "pre-restore" => "snapshot.pre_restore",
             "watch" => "snapshot.automatic",
+            "manual" => "backup.manual",
             _ => "snapshot.manual",
         }
     })

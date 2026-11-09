@@ -1,5 +1,4 @@
-//! CC Same's look: a monochrome light and dark theme for GPUI Kit (`assets/theme.json`), and the
-//! few product colors the rings in the headline need, derived from the theme's semantic tokens.
+//! CCSwift’s design tokens, serif fonts, orange glass surfaces, and runtime Claude mark.
 
 use gpui_kit::component::{ActiveTheme as _, Theme, ThemeMode, ThemeSet};
 use gpui_kit::{Anchor, App, BoxShadow, Hsla, Window, point, px};
@@ -77,40 +76,8 @@ pub fn follow(choice: ThemeChoice, window: &mut Window, cx: &mut App) {
     if cx.theme().mode != mode {
         Theme::change(mode, Some(window), cx);
     }
-}
-
-/// Colors for the rings in the headline. Everything comes from the theme's semantic tokens, so
-/// a custom theme repaints them too.
-#[derive(Clone, Copy, Debug)]
-pub struct RingColors {
-    /// The outline of a ring.
-    pub stroke: Hsla,
-    /// The outline of a ring the pointer is over.
-    pub stroke_hover: Hsla,
-    /// The translucent fill; overlaps deepen where rings share sessions.
-    pub fill: Hsla,
-    /// The account Claude has open.
-    pub open: Hsla,
-    /// Initials inside a ring.
-    pub label: Hsla,
-    pub danger: Hsla,
-    /// The faint dot grid behind the rings.
-    pub grid: Hsla,
-}
-
-impl RingColors {
-    pub fn new(cx: &App) -> RingColors {
-        let theme = cx.theme();
-        let dark = theme.is_dark();
-        RingColors {
-            stroke: theme.foreground.opacity(if dark { 0.24 } else { 0.18 }),
-            stroke_hover: theme.foreground.opacity(if dark { 0.55 } else { 0.45 }),
-            fill: theme.primary.opacity(if dark { 0.15 } else { 0.18 }),
-            open: theme.foreground,
-            label: theme.muted_foreground,
-            danger: theme.danger,
-            grid: theme.foreground.opacity(if dark { 0.22 } else { 0.18 }),
-        }
+    if cx.theme().font_family.as_ref() != font() {
+        Theme::global_mut(cx).font_family = font().into();
     }
 }
 
@@ -138,4 +105,63 @@ pub fn card_shadow(cx: &App) -> Vec<BoxShadow> {
             inset: false,
         },
     ]
+}
+
+pub fn font() -> &'static str {
+    if crate::i18n::current() == "zh-CN" { "Songti SC" } else { "Times New Roman" }
+}
+pub fn accent_text(cx: &App) -> Hsla {
+    gpui_kit::rgb(if cx.theme().is_dark() { 0xE8956F } else { 0xB5532F }).into()
+}
+pub fn empty(cx: &App) -> Hsla {
+    gpui_kit::rgb(if cx.theme().is_dark() { 0x2A2724 } else { 0xE7E4DF }).into()
+}
+pub fn bar(cx: &App) -> Hsla {
+    gpui_kit::rgb(if cx.theme().is_dark() { 0xBDB6AC } else { 0x3A3632 }).into()
+}
+pub fn jelly() -> gpui_kit::Background {
+    gpui_kit::linear_gradient(
+        180.,
+        gpui_kit::linear_color_stop(gpui_kit::rgb(0xDE7854).opacity(0.86), 0.),
+        gpui_kit::linear_color_stop(gpui_kit::rgb(0xC45C38).opacity(0.94), 1.),
+    )
+}
+pub fn jelly_shadow() -> Vec<BoxShadow> {
+    vec![
+        BoxShadow {
+            color: gpui_kit::white().opacity(0.55),
+            offset: point(px(0.), px(1.)),
+            blur_radius: px(0.),
+            spread_radius: px(0.),
+            inset: true,
+        },
+        BoxShadow {
+            color: gpui_kit::rgb(0xD97757).opacity(0.3).into(),
+            offset: point(px(0.), px(10.)),
+            blur_radius: px(26.),
+            spread_radius: px(0.),
+            inset: false,
+        },
+    ]
+}
+
+/// Runtime-only asset: preserve the installed mark's alpha and tint its pixels orange (BGRA).
+/// Missing or unreadable assets omit the optional mark; no copy is written to disk.
+pub(crate) fn load_mark(resources: &std::path::Path) -> Option<std::sync::Arc<gpui_kit::RenderImage>> {
+    ["TrayIconTemplate@2x.png", "TrayIconTemplate@3x.png"].iter().find_map(|name| {
+        let mut pixels = image::open(resources.join(name)).ok()?.to_rgba8();
+        for pixel in pixels.pixels_mut() {
+            pixel.0 = [0x57, 0x77, 0xD9, pixel.0[3]];
+        }
+        Some(std::sync::Arc::new(gpui_kit::RenderImage::new(vec![image::Frame::new(pixels)])))
+    })
+}
+
+#[cfg(test)]
+mod mark_tests {
+    #[test]
+    fn missing_claude_resources_omit_mark() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(super::load_mark(&dir.path().join("missing-Claude.app/Contents/Resources")).is_none());
+    }
 }

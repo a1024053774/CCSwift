@@ -75,6 +75,7 @@ pub struct Store {
     pub ctx: Arc<Ctx>,
     pub overview: Option<Arc<Overview>>,
     pub snapshots: Vec<Manifest>,
+    pub snapshot_sizes: std::collections::BTreeMap<String, Option<u64>>,
     pub busy: Option<Busy>,
     pub cli_accounts: Option<Result<Vec<cc_same_core::cli_accounts::Account>, String>>,
     pub cli_switching: Option<u64>,
@@ -112,6 +113,7 @@ impl Store {
             ctx,
             overview: None,
             snapshots: Vec::new(),
+            snapshot_sizes: Default::default(),
             busy: None,
             cli_accounts: None,
             cli_switching: None,
@@ -299,9 +301,21 @@ impl Store {
         }
         self.refreshing = true;
         let ctx = self.ctx.clone();
+        let mut sizes = self.snapshot_sizes.clone();
         cx.spawn(async move |this, cx| {
-            let (overview, snapshots) =
-                cx.background_executor().spawn(async move { (report::overview(&ctx), snapshot::list(&ctx)) }).await;
+            let (overview, snapshots, sizes) = cx
+                .background_executor()
+                .spawn(async move {
+                    let snapshots = snapshot::list(&ctx);
+                    sizes.retain(|id, _| snapshots.iter().any(|s| &s.id == id));
+                    for s in &snapshots {
+                        sizes.entry(s.id.clone()).or_insert_with(|| {
+                            crate::backups::directory_size(&ctx.paths.snapshots_dir().join(&s.id)).ok()
+                        });
+                    }
+                    (report::overview(&ctx), snapshots, sizes)
+                })
+                .await;
             let _ = this.update(cx, |this, cx| {
                 this.refreshing = false;
                 this.pending_since = match (overview.plan.total > 0, this.pending_since) {
@@ -312,6 +326,7 @@ impl Store {
                 let signed_in = overview.logins.signed_in.clone();
                 this.overview = Some(Arc::new(overview));
                 this.snapshots = snapshots;
+                this.snapshot_sizes = sizes;
                 this.renew_agent(cx);
                 // Claude was waiting on its sign-in page, and now someone signed in.
                 if this.busy.is_none()
@@ -419,6 +434,15 @@ impl Store {
             });
         })
         .detach();
+    }
+
+    pub fn backup_now(&mut self, cx: &mut Context<Self>) {
+        self.run_task(Busy::Saving, cx, |ctx| {
+            let _lock = apply::Lock::acquire(ctx, Duration::from_secs(30))?;
+            snapshot::take(ctx, "manual")?;
+            snapshot::prune(ctx, &cc_same_core::config::State::load(&ctx.paths));
+            Ok(t("backup.saved"))
+        });
     }
 
     pub fn restore(&mut self, id: String, cx: &mut Context<Self>) {

@@ -2,7 +2,7 @@
 
 ## Destination
 
-CCSwift, one macOS app (this fork of CC Same), switches **Desktop** accounts (existing cc-same behavior) and **CLI** accounts (list, switch, add, re-login; no `cswap` needed) on two tabs, with every account's usage and status in one table. Spec: [specs/desktop-and-cli.md](specs/desktop-and-cli.md).
+CCSwift, one macOS app (this fork of CC Same), switches **Desktop** accounts (existing cc-same behavior) and **CLI** accounts (list, switch, add, re-login; no `cswap` needed) on two tabs, with every account's usage and status in one table. Current window and add flow: [T-011](tickets/T-011-redesign-decisions.md). Store and switching spec: [specs/desktop-and-cli.md](specs/desktop-and-cli.md).
 
 ## Notes
 

@@ -44,8 +44,8 @@ mod mac {
     const GRACE: (&str, &str) = ("9e31ea7e-1c2d-4e5f-8a9b-0c1d2e3f4a5b", "58e6a9d0-2b3c-4d5e-8f60-718293a4b5c6");
     const THIRD: (&str, &str) = ("c47b90e2-6d5c-4b3a-9281-7f6e5d4c3b2a", "e1d2c3b4-a596-4877-9665-544332211009");
 
-    const WIDTH: f32 = 420.;
-    const HEIGHT: f32 = 600.;
+    const WIDTH: f32 = 720.;
+    const HEIGHT: f32 = 660.;
 
     #[derive(Clone, Copy)]
     enum Overlay {
@@ -66,8 +66,6 @@ mod mac {
         Name(&'static str),
         /// Name… for Grace, after typing a name with a space in it and pressing Return.
         NameRefused,
-        /// The pointer rests on an account's row.
-        Hover(&'static str),
     }
 
     /// Where switching accounts stands in a scene.
@@ -196,12 +194,6 @@ mod mac {
             Scene { language: "zh-CN", overlay: Overlay::Name(ADA.0), ..scene("zh-CN-name-dark", Dark, named) },
             Scene { overlay: Overlay::NameRefused, ..scene("name-refused-light", Light, in_sync) },
             scene("named-light", Light, named),
-            Scene { overlay: Overlay::Hover(GRACE.0), ..scene("hover-light", Light, in_sync) },
-            Scene {
-                language: "zh-CN",
-                overlay: Overlay::Hover(THIRD.0),
-                ..scene("zh-CN-hover-named-dark", Dark, named)
-            },
             Scene { overlay: Overlay::Settings, tall: true, ..scene("settings-tall-light", Light, in_sync) },
             Scene {
                 language: "zh-CN",
@@ -313,7 +305,6 @@ mod mac {
                 Overlay::ConfirmNext => this.confirm_next(window, cx),
                 Overlay::Name(account) => this.open_name(account.into(), window, cx),
                 Overlay::NameRefused => this.open_name(GRACE.0.into(), window, cx),
-                Overlay::Hover(account) => this.set_hovered(Some(account.into()), cx),
             })
         })?;
         settle(cx, window.into())?;

@@ -6,9 +6,9 @@
 rust_i18n::i18n!("locales", fallback = "en");
 
 pub mod assets;
+mod backups;
 mod cli_login;
 mod dock;
-pub mod hero;
 pub mod i18n;
 mod login;
 pub mod model;
@@ -46,8 +46,8 @@ pub fn window_options(cx: &mut App) -> WindowOptions {
     WindowOptions {
         titlebar: Some(TitlebarOptions { title: Some(APP_NAME.into()), ..TitleBar::title_bar_options() }),
         app_id: Some(APP_ID.into()),
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(420.), px(600.)), cx))),
-        window_min_size: Some(size(px(380.), px(520.))),
+        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(720.), px(660.)), cx))),
+        window_min_size: Some(size(px(640.), px(480.))),
         ..TitleBar::window_options()
     }
 }

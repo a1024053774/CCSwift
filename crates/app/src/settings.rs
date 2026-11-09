@@ -5,7 +5,6 @@ use crate::i18n::{self, t, tf, tn};
 use crate::model;
 use crate::store::Store;
 use crate::theme::ThemeChoice;
-use crate::view::UniApp;
 use cc_same_core::config::Config;
 use cc_same_core::report::Warning;
 use cc_same_core::retention::Limit;
@@ -29,7 +28,6 @@ fn body(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
     let this = store.read(cx);
     let cfg = this.config();
     let idle = this.busy.is_none();
-    let running = this.overview.as_ref().is_some_and(|o| o.app.running);
     let retention = this.overview.as_ref().map(|o| o.retention.clone()).unwrap_or_default();
     let missing = this.overview.as_ref().and_then(|o| {
         o.warnings.iter().find_map(|w| match w {
@@ -37,12 +35,9 @@ fn body(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
             _ => None,
         })
     });
-    let baseline = this.overview.as_ref().and_then(|o| o.baseline.clone());
     let accounts = this.accounts();
     let current_theme = this.theme();
     let open_at_login = this.open_at_login;
-    let mut snapshots = this.snapshots.clone();
-    snapshots.reverse();
     let state_dir = this.ctx.paths.state_dir.clone();
     let log = this.ctx.paths.log_file.clone();
     let muted = cx.theme().muted_foreground;
@@ -206,36 +201,6 @@ fn body(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
         transcripts.push(note(tn("settings.missing", n, &[]), cx));
     }
 
-    let mut restore: Vec<AnyElement> = Vec::new();
-    if running && !snapshots.is_empty() {
-        restore.push(note(t("settings.quit_to_restore"), cx));
-    }
-    for snap in &snapshots {
-        let partitions = snap.partitions.iter().filter(|p| p.surface == "code").count();
-        let why = model::snapshot_reason(&snap.reason, baseline.as_deref() == Some(snap.id.as_str()));
-        let picked = snap.clone();
-        restore.push(row(
-            model::snapshot_when(&snap.id),
-            Some(format!("{why} · {}", tn("snapshot.accounts", partitions, &[]))),
-            Button::new(SharedString::from(format!("restore-{}", snap.id)))
-                .small()
-                .outline()
-                .label(t("settings.restore"))
-                .disabled(running || !idle)
-                .on_click(move |_, window, cx| {
-                    let picked = picked.clone();
-                    if let Some(view) = main_view(window, cx) {
-                        view.update(cx, |this, cx| this.confirm_restore(&picked, window, cx));
-                    }
-                })
-                .into_any_element(),
-            cx,
-        ));
-    }
-    if snapshots.is_empty() {
-        restore.push(note(t("settings.no_snapshots"), cx));
-    }
-
     let files = vec![
         row(
             t("settings.state"),
@@ -271,7 +236,6 @@ fn body(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
         .child(group(t("settings.sync"), sync, cx))
         .child(group(t("accounts.title"), people, cx))
         .child(group(t("settings.transcripts"), transcripts, cx))
-        .child(group(t("settings.snapshots"), restore, cx))
         .child(group(t("settings.files"), files, cx))
         .child(
             div()
@@ -282,15 +246,6 @@ fn body(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
         )
 }
 
-/// The window's own view, for actions that open a dialog in it.
-fn main_view(window: &mut Window, cx: &mut App) -> Option<Entity<UniApp>> {
-    window
-        .root::<gpui_kit::component::Root>()
-        .flatten()
-        .and_then(|root| root.read(cx).view().clone().downcast::<UniApp>().ok())
-}
-
-/// The language button: the current choice, and a menu of every language in its own name.
 fn language_picker(store: &Entity<Store>, preference: &str) -> AnyElement {
     let system = || tf("language.system", &[("language", &i18n::language_name(i18n::system_language()))]);
     let label = if i18n::LANGUAGES.iter().any(|l| l.code == preference) {

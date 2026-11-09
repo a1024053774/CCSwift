@@ -1,6 +1,5 @@
-//! The interface language: English plus nine translations (`locales/app.yml`), following the
-//! system unless the user picks one. GPUI Kit reads the same locale, so its components switch
-//! along.
+//! English and Simplified Chinese, following the preference or system language.
+//! Unsupported languages fall back to English.
 
 use std::fmt::Display;
 
@@ -10,25 +9,15 @@ pub struct Language {
     pub name: &'static str,
 }
 
-pub const LANGUAGES: &[Language] = &[
-    Language { code: "en", name: "English" },
-    Language { code: "zh-CN", name: "简体中文" },
-    Language { code: "zh-TW", name: "繁體中文" },
-    Language { code: "ja", name: "日本語" },
-    Language { code: "ko", name: "한국어" },
-    Language { code: "fr", name: "Français" },
-    Language { code: "de", name: "Deutsch" },
-    Language { code: "es", name: "Español" },
-    Language { code: "pt-BR", name: "Português (Brasil)" },
-    Language { code: "ru", name: "Русский" },
-];
+pub const LANGUAGES: &[Language] =
+    &[Language { code: "en", name: "English" }, Language { code: "zh-CN", name: "简体中文" }];
 
 /// The preference that means "whatever the system uses".
 pub const SYSTEM: &str = "system";
 
 /// The best match for the system's preferred languages, or English.
 pub fn system_language() -> &'static str {
-    sys_locale::get_locales().find_map(|tag| matching(&tag)).unwrap_or("en")
+    sys_locale::get_locales().next().and_then(|tag| matching(&tag)).unwrap_or("en")
 }
 
 /// Map a BCP 47 tag (`de-AT`, `zh-Hant-HK`, `pt_PT`) to a language we have.
@@ -38,18 +27,15 @@ fn matching(tag: &str) -> Option<&'static str> {
     let language = parts.next()?;
     let rest: Vec<&str> = parts.collect();
     match language {
-        "zh" => {
-            let traditional = rest.iter().any(|p| matches!(*p, "hant" | "tw" | "hk" | "mo"));
-            Some(if traditional { "zh-TW" } else { "zh-CN" })
-        }
-        "pt" => Some("pt-BR"),
-        _ => LANGUAGES.iter().find(|l| l.code == language).map(|l| l.code),
+        "zh" if !rest.iter().any(|p| matches!(*p, "hant" | "tw" | "hk" | "mo")) => Some("zh-CN"),
+        "en" => Some("en"),
+        _ => None,
     }
 }
 
 /// Use `preference` (a language code, or [`SYSTEM`]) from now on; returns the language chosen.
 pub fn apply(preference: &str) -> &'static str {
-    let code = LANGUAGES.iter().find(|l| l.code == preference).map(|l| l.code).unwrap_or_else(system_language);
+    let code = if preference == SYSTEM { system_language() } else { matching(preference).unwrap_or("en") };
     rust_i18n::set_locale(code);
     code
 }
@@ -158,10 +144,10 @@ mod tests {
     fn system_tags_match_our_languages() {
         assert_eq!(matching("en-US"), Some("en"));
         assert_eq!(matching("zh-Hans-CN"), Some("zh-CN"));
-        assert_eq!(matching("zh_TW"), Some("zh-TW"));
-        assert_eq!(matching("zh-Hant-HK"), Some("zh-TW"));
-        assert_eq!(matching("pt-PT"), Some("pt-BR"));
-        assert_eq!(matching("de-AT"), Some("de"));
+        assert_eq!(matching("zh_TW"), None);
+        assert_eq!(matching("zh-Hant-HK"), None);
+        assert_eq!(matching("pt-PT"), None);
+        assert_eq!(matching("de-AT"), None);
         assert_eq!(matching("sv-SE"), None);
     }
 

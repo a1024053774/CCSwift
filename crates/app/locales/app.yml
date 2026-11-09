@@ -8,29 +8,9 @@ _version: 2
 "page.cli":
   en: "CLI"
   zh-CN: "CLI"
-"page.usage":
-  en: "Usage"
-  zh-CN: "用量"
-"usage.refresh":
-  en: "Refresh"
-  zh-CN: "刷新"
-"usage.refreshing":
-  en: "Refreshing…"
-  zh-CN: "正在刷新…"
-
-"cli.title":
-  en: "CLI accounts"
-  zh-CN: "CLI 账号"
-"cli.active":
-  en: "Active"
-  zh-CN: "正在使用"
 "cli.loading":
   en: "Reading CLI accounts…"
   zh-CN: "正在读取 CLI 账号…"
-"cli.empty":
-  en: "Run `cswap add` to add a CLI account."
-  zh-CN: "运行 `cswap add` 添加 CLI 账号。"
-
 "headline.loading":
   en: "Reading your accounts…"
   zh-CN: "正在读取你的账号…"
@@ -354,28 +334,6 @@ _version: 2
   es: "Abierta en Claude"
   pt-BR: "Aberta no Claude"
   ru: "Открыт в Claude"
-"ring.missing":
-  en: "Claude isn’t signed in on this computer"
-  zh-CN: "这台电脑上的 Claude 还没有登录"
-  zh-TW: "這台電腦上的 Claude 尚未登入"
-  ja: "このコンピュータの Claude はまだサインインしていません"
-  ko: "이 컴퓨터의 Claude에 로그인되어 있지 않습니다"
-  fr: "Claude n’est connecté à aucun compte sur cet ordinateur"
-  de: "Claude ist auf diesem Computer nicht angemeldet"
-  es: "Claude no tiene ninguna sesión iniciada en este equipo"
-  pt-BR: "O Claude não está conectado neste computador"
-  ru: "В Claude на этом компьютере не выполнен вход"
-"ring.invite":
-  en: "Sign in to another account in Claude to add it"
-  zh-CN: "在 Claude 里登录另一个账号即可加入"
-  zh-TW: "在 Claude 中登入另一個帳號即可加入"
-  ja: "Claude で別のアカウントにサインインすると追加されます"
-  ko: "Claude에서 다른 계정으로 로그인하면 추가됩니다"
-  fr: "Connectez-vous à un autre compte dans Claude pour l’ajouter"
-  de: "Melde dich in Claude bei einem weiteren Konto an, um es hinzuzufügen"
-  es: "Inicia sesión con otra cuenta en Claude para añadirla"
-  pt-BR: "Entre com outra conta no Claude para adicioná-la"
-  ru: "Войдите в Claude под другим аккаунтом, чтобы добавить его"
 "action.sync_now":
   en: "Sync now"
   zh-CN: "立即同步"
@@ -387,39 +345,6 @@ _version: 2
   es: "Sincronizar ahora"
   pt-BR: "Sincronizar agora"
   ru: "Синхронизировать"
-"action.fix_folders":
-  en: "Fix folders…"
-  zh-CN: "修复文件夹…"
-  zh-TW: "修復資料夾…"
-  ja: "フォルダを修正…"
-  ko: "폴더 고치기…"
-  fr: "Réparer les dossiers…"
-  de: "Ordner reparieren …"
-  es: "Reparar carpetas…"
-  pt-BR: "Corrigir pastas…"
-  ru: "Исправить папки…"
-"hint.quit_first":
-  en: "Quit Claude first."
-  zh-CN: "请先退出 Claude。"
-  zh-TW: "請先結束 Claude。"
-  ja: "先に Claude を終了してください。"
-  ko: "먼저 Claude를 종료하세요."
-  fr: "Quittez d’abord Claude."
-  de: "Beende zuerst Claude."
-  es: "Cierra Claude primero."
-  pt-BR: "Feche o Claude primeiro."
-  ru: "Сначала закройте Claude."
-"synced_ago":
-  en: "Synced %{ago}"
-  zh-CN: "上次同步：%{ago}"
-  zh-TW: "上次同步：%{ago}"
-  ja: "最終同期：%{ago}"
-  ko: "마지막 동기화: %{ago}"
-  fr: "Synchronisé %{ago}"
-  de: "Synchronisiert %{ago}"
-  es: "Sincronizado %{ago}"
-  pt-BR: "Sincronizado %{ago}"
-  ru: "Синхронизировано %{ago}"
 "background.title":
   en: "Sync in the background"
   zh-CN: "后台同步"
@@ -431,50 +356,6 @@ _version: 2
   es: "Sincronizar en segundo plano"
   pt-BR: "Sincronizar em segundo plano"
   ru: "Синхронизация в фоне"
-"background.on":
-  en: "On · checked %{ago}"
-  zh-CN: "已开启 · %{ago}检查过"
-  zh-TW: "已開啟 · %{ago}檢查過"
-  ja: "オン · 最終確認：%{ago}"
-  ko: "켜짐 · %{ago} 확인"
-  fr: "Activée · vérifiée %{ago}"
-  de: "An · geprüft %{ago}"
-  es: "Activada · comprobada %{ago}"
-  pt-BR: "Ativada · verificada %{ago}"
-  ru: "Включена · проверено %{ago}"
-"background.stalled":
-  en: "On, but not running. Turn it off and on again."
-  zh-CN: "已开启，但没有在运行。请关掉再重新打开。"
-  zh-TW: "已開啟，但沒有在執行。請關閉後再重新開啟。"
-  ja: "オンですが動作していません。いったんオフにしてからオンにしてください。"
-  ko: "켜져 있지만 실행되고 있지 않습니다. 껐다가 다시 켜세요."
-  fr: "Activée, mais à l’arrêt. Désactivez-la puis réactivez-la."
-  de: "An, aber nicht aktiv. Schalte es aus und wieder ein."
-  es: "Activada, pero detenida. Desactívala y vuelve a activarla."
-  pt-BR: "Ativada, mas parada. Desative e ative de novo."
-  ru: "Включена, но не работает. Выключите и включите снова."
-"background.starting":
-  en: "On · starting…"
-  zh-CN: "已开启 · 正在启动…"
-  zh-TW: "已開啟 · 正在啟動…"
-  ja: "オン · 起動中…"
-  ko: "켜짐 · 시작하는 중…"
-  fr: "Activée · démarrage…"
-  de: "An · wird gestartet …"
-  es: "Activada · iniciando…"
-  pt-BR: "Ativada · iniciando…"
-  ru: "Включена · запускается…"
-"background.stalled_mac":
-  en: "If it stays like this, allow it in System Settings › General › Login Items & Extensions."
-  zh-CN: "如果一直这样，请到“系统设置 › 通用 › 登录项与扩展”里允许它在后台运行。"
-  zh-TW: "如果一直這樣，請到「系統設定 › 一般 › 登入項目與延伸功能」裡允許它在背景執行。"
-  ja: "この状態が続く場合は、「システム設定 › 一般 › ログイン項目と機能拡張」でバックグラウンドでの実行を許可してください。"
-  ko: "계속 이 상태라면 시스템 설정 › 일반 › 로그인 항목 및 확장 프로그램에서 백그라운드 실행을 허용하세요."
-  fr: "Si cela persiste, autorisez-la dans Réglages Système › Général › Ouverture et extensions."
-  de: "Bleibt es so, erlaube sie unter Systemeinstellungen › Allgemein › Anmeldeobjekte & Erweiterungen."
-  es: "Si sigue así, permítela en Ajustes del Sistema › General › Ítems de inicio y extensiones."
-  pt-BR: "Se continuar assim, permita em Ajustes do Sistema › Geral › Itens de Início e Extensões."
-  ru: "Если так и останется, разрешите фоновую работу: Системные настройки › Основные › Объекты входа и расширения."
 "background.move_first":
   en: "Move CC Same to the Applications folder first, then turn this on."
   zh-CN: "请先把 CC Same 移到“应用程序”文件夹，再打开这个开关。"
@@ -486,28 +367,6 @@ _version: 2
   es: "Primero mueve CC Same a la carpeta Aplicaciones y luego actívalo."
   pt-BR: "Primeiro mova o CC Same para a pasta Aplicativos e depois ative esta opção."
   ru: "Сначала переместите CC Same в папку «Программы», затем включите эту функцию."
-"background.legacy":
-  en: "An older version is running. Turn on to update it."
-  zh-CN: "正在运行旧版本，打开开关即可更新。"
-  zh-TW: "正在執行舊版本，開啟開關即可更新。"
-  ja: "古いバージョンが動作しています。オンにすると更新されます。"
-  ko: "이전 버전이 실행 중입니다. 켜면 업데이트됩니다."
-  fr: "Une ancienne version tourne. Activez pour la mettre à jour."
-  de: "Eine ältere Version läuft. Schalte ein, um sie zu aktualisieren."
-  es: "Hay una versión anterior en marcha. Actívala para actualizarla."
-  pt-BR: "Uma versão antiga está rodando. Ative para atualizá-la."
-  ru: "Работает старая версия. Включите, чтобы обновить её."
-"background.off":
-  en: "Works even when this window is closed."
-  zh-CN: "关掉这个窗口也会继续同步。"
-  zh-TW: "關掉這個視窗也會繼續同步。"
-  ja: "このウインドウを閉じても動き続けます。"
-  ko: "이 창을 닫아도 계속 동작합니다."
-  fr: "Fonctionne même fenêtre fermée."
-  de: "Läuft auch bei geschlossenem Fenster."
-  es: "Funciona aunque cierres esta ventana."
-  pt-BR: "Funciona mesmo com esta janela fechada."
-  ru: "Работает, даже когда это окно закрыто."
 "accounts.title":
   en: "Accounts"
   zh-CN: "账号"
@@ -519,17 +378,6 @@ _version: 2
   es: "Cuentas"
   pt-BR: "Contas"
   ru: "Аккаунты"
-"accounts.empty":
-  en: "No accounts yet. Sign in to Claude, and they show up here."
-  zh-CN: "还没有账号。登录 Claude 后会显示在这里。"
-  zh-TW: "還沒有帳號。登入 Claude 後會顯示在這裡。"
-  ja: "アカウントはまだありません。Claude にサインインするとここに表示されます。"
-  ko: "아직 계정이 없습니다. Claude에 로그인하면 여기에 표시됩니다."
-  fr: "Aucun compte pour l’instant. Connectez-vous à Claude pour les voir ici."
-  de: "Noch keine Konten. Melde dich bei Claude an, dann erscheinen sie hier."
-  es: "Aún no hay cuentas. Inicia sesión en Claude y aparecerán aquí."
-  pt-BR: "Ainda não há contas. Entre no Claude e elas aparecem aqui."
-  ru: "Аккаунтов пока нет. Войдите в Claude, и они появятся здесь."
 "notice.restart.one":
   en: "Quit and reopen Claude to see the session copied into %{account}."
   fr: "Quittez puis rouvrez Claude pour voir la session copiée dans %{account}."
@@ -1312,17 +1160,6 @@ _version: 2
   ru: "%{count} дня"
 "period.days.many":
   ru: "%{count} дней"
-"settings.snapshots":
-  en: "Snapshots"
-  zh-CN: "快照"
-  zh-TW: "快照"
-  ja: "スナップショット"
-  ko: "스냅샷"
-  fr: "Instantanés"
-  de: "Schnappschüsse"
-  es: "Instantáneas"
-  pt-BR: "Instantâneos"
-  ru: "Снимки"
 "settings.quit_to_restore":
   en: "Quit Claude to restore a snapshot."
   zh-CN: "退出 Claude 后才能恢复快照。"
@@ -1400,27 +1237,6 @@ _version: 2
   es: "Antes de una sincronización"
   pt-BR: "Antes de uma sincronização"
   ru: "Перед синхронизацией"
-"snapshot.accounts.one":
-  en: "%{count} account"
-  fr: "%{count} compte"
-  de: "%{count} Konto"
-  es: "%{count} cuenta"
-  pt-BR: "%{count} conta"
-  ru: "%{count} аккаунт"
-"snapshot.accounts.other":
-  en: "%{count} accounts"
-  zh-CN: "%{count} 个账号"
-  zh-TW: "%{count} 個帳號"
-  ja: "%{count} アカウント"
-  ko: "계정 %{count}개"
-  fr: "%{count} comptes"
-  de: "%{count} Konten"
-  es: "%{count} cuentas"
-  pt-BR: "%{count} contas"
-"snapshot.accounts.few":
-  ru: "%{count} аккаунта"
-"snapshot.accounts.many":
-  ru: "%{count} аккаунтов"
 "settings.files":
   en: "Files"
   zh-CN: "文件"
@@ -2080,17 +1896,6 @@ _version: 2
   es: "Cambiando…"
   pt-BR: "Trocando…"
   ru: "Переключаем…"
-"account.sign_in":
-  en: "Sign in"
-  zh-CN: "登录"
-  zh-TW: "登入"
-  ja: "サインイン"
-  ko: "로그인"
-  fr: "Se connecter"
-  de: "Anmelden"
-  es: "Iniciar sesión"
-  pt-BR: "Entrar"
-  ru: "Войти"
 "account.stale":
   en: "It’s been a while: Claude may ask you to sign in again."
   zh-CN: "有一阵子没用了，Claude 可能会要求重新登录。"
@@ -2102,17 +1907,6 @@ _version: 2
   es: "Hace tiempo que no se usa: Claude podría pedirte que vuelvas a iniciar sesión."
   pt-BR: "Faz tempo que não é usada: o Claude pode pedir para entrar de novo."
   ru: "Давно не использовался: Claude может попросить войти снова."
-"accounts.add":
-  en: "Sign in to another account"
-  zh-CN: "登录另一个账号"
-  zh-TW: "登入另一個帳號"
-  ja: "別のアカウントにサインイン"
-  ko: "다른 계정으로 로그인"
-  fr: "Se connecter à un autre compte"
-  de: "Bei einem weiteren Konto anmelden"
-  es: "Iniciar sesión en otra cuenta"
-  pt-BR: "Entrar em outra conta"
-  ru: "Войти в другой аккаунт"
 "signin.title":
   en: "Sign in to another account"
   zh-CN: "登录另一个账号"
@@ -2388,83 +2182,6 @@ _version: 2
   es: "7 d %{percent} %"
   pt-BR: "7 d %{percent}%"
   ru: "7 д %{percent}%"
-"usage.tip":
-  en: "%{usage} · read by Claude %{ago}"
-  zh-CN: "%{usage} · %{ago}由 Claude 读取"
-  zh-TW: "%{usage} · %{ago}由 Claude 讀取"
-  ja: "%{usage} · %{ago}に Claude が読み取り"
-  ko: "%{usage} · %{ago} Claude가 읽음"
-  fr: "%{usage} · lu par Claude %{ago}"
-  de: "%{usage} · %{ago} von Claude gelesen"
-  es: "%{usage} · leído por Claude %{ago}"
-  pt-BR: "%{usage} · lido pelo Claude %{ago}"
-  ru: "%{usage} · Claude прочитал %{ago}"
-"usage.stale.mac":
-  en: "%{usage} · read by Claude %{ago}. Right-click Claude’s icon in the menu bar to have it check again."
-  zh-CN: "%{usage} · %{ago}由 Claude 读取。右键点按菜单栏里的 Claude 图标，它就会重新读取。"
-  zh-TW: "%{usage} · %{ago}由 Claude 讀取。在選單列的 Claude 圖示上按右鍵，它就會重新讀取。"
-  ja: "%{usage} · %{ago}に Claude が読み取り。メニューバーの Claude アイコンを右クリックすると、もう一度読み取ります。"
-  ko: "%{usage} · %{ago} Claude가 읽음. 메뉴 막대의 Claude 아이콘을 오른쪽 클릭하면 다시 읽습니다."
-  fr: "%{usage} · lu par Claude %{ago}. Faites un clic droit sur l’icône de Claude dans la barre des menus pour qu’il vérifie à nouveau."
-  de: "%{usage} · %{ago} von Claude gelesen. Klicke mit der rechten Maustaste auf Claudes Symbol in der Menüleiste, damit es erneut nachsieht."
-  es: "%{usage} · leído por Claude %{ago}. Haz clic derecho en el icono de Claude en la barra de menús para que vuelva a consultarlo."
-  pt-BR: "%{usage} · lido pelo Claude %{ago}. Clique com o botão direito no ícone do Claude na barra de menus para ele verificar de novo."
-  ru: "%{usage} · Claude прочитал %{ago}. Щёлкните правой кнопкой по значку Claude в строке меню, чтобы он проверил снова."
-"usage.stale.other":
-  en: "%{usage} · read by Claude %{ago}. Right-click Claude’s icon in the system tray to have it check again."
-  zh-CN: "%{usage} · %{ago}由 Claude 读取。右键点击系统托盘里的 Claude 图标，它就会重新读取。"
-  zh-TW: "%{usage} · %{ago}由 Claude 讀取。在系統匣的 Claude 圖示上按右鍵，它就會重新讀取。"
-  ja: "%{usage} · %{ago}に Claude が読み取り。システムトレイの Claude アイコンを右クリックすると、もう一度読み取ります。"
-  ko: "%{usage} · %{ago} Claude가 읽음. 시스템 트레이의 Claude 아이콘을 오른쪽 클릭하면 다시 읽습니다."
-  fr: "%{usage} · lu par Claude %{ago}. Faites un clic droit sur l’icône de Claude dans la zone de notification pour qu’il vérifie à nouveau."
-  de: "%{usage} · %{ago} von Claude gelesen. Klicke mit der rechten Maustaste auf Claudes Symbol im Infobereich, damit es erneut nachsieht."
-  es: "%{usage} · leído por Claude %{ago}. Haz clic derecho en el icono de Claude en la bandeja del sistema para que vuelva a consultarlo."
-  pt-BR: "%{usage} · lido pelo Claude %{ago}. Clique com o botão direito no ícone do Claude na bandeja do sistema para ele verificar de novo."
-  ru: "%{usage} · Claude прочитал %{ago}. Щёлкните правой кнопкой по значку Claude в системном трее, чтобы он проверил снова."
-"account.name":
-  en: "Name…"
-  zh-CN: "命名…"
-  zh-TW: "命名…"
-  ja: "名前を付ける…"
-  ko: "이름 지정…"
-  fr: "Nommer…"
-  de: "Benennen …"
-  es: "Poner nombre…"
-  pt-BR: "Dar Nome…"
-  ru: "Назвать…"
-"account.name_tip":
-  en: "Name this account"
-  zh-CN: "给这个账号命名"
-  zh-TW: "為這個帳號命名"
-  ja: "このアカウントに名前を付ける"
-  ko: "이 계정 이름 지정"
-  fr: "Nommer ce compte"
-  de: "Dieses Konto benennen"
-  es: "Poner nombre a esta cuenta"
-  pt-BR: "Dar nome a esta conta"
-  ru: "Назвать этот аккаунт"
-"account.rotation":
-  en: "Include in Next Account"
-  zh-CN: "参与“下一个账号”"
-  zh-TW: "參與「下一個帳號」"
-  ja: "「次のアカウント」に含める"
-  ko: "‘다음 계정’에 포함"
-  fr: "Inclure dans « Compte suivant »"
-  de: "In „Nächstes Konto“ einbeziehen"
-  es: "Incluir en «Siguiente cuenta»"
-  pt-BR: "Incluir em “Próxima Conta”"
-  ru: "Включать в «Следующий аккаунт»"
-"account.remove":
-  en: "Remove from List…"
-  zh-CN: "从列表移除…"
-  zh-TW: "從列表移除…"
-  ja: "リストから削除…"
-  ko: "목록에서 제거…"
-  fr: "Retirer de la liste…"
-  de: "Aus der Liste entfernen …"
-  es: "Quitar de la lista…"
-  pt-BR: "Remover da Lista…"
-  ru: "Убрать из списка…"
 "remove.title":
   en: "Remove %{account}?"
   zh-CN: "移除 %{account}？"
@@ -2674,3 +2391,295 @@ _version: 2
   es: "Se dejó de esperar. No cambió nada, pero Claude se cerrará igualmente al terminar su trabajo, como elegiste."
   pt-BR: "Parou de esperar. Nada mudou, mas o Claude ainda vai fechar quando terminar o trabalho, como você escolheu."
   ru: "Ожидание остановлено. Ничего не изменилось, но Claude всё равно закроется, когда закончит работу, как вы выбрали."
+
+"ui.updated":
+  en: "Usage updated %{ago}"
+  zh-CN: "用量更新于 %{ago}"
+
+"ui.refresh":
+  en: "Refresh usage and status"
+  zh-CN: "刷新用量和状态"
+
+"ui.search":
+  en: "Search email"
+  zh-CN: "搜索邮箱"
+
+"ui.sort":
+  en: "Sort: 5h ↓"
+  zh-CN: "排序：5 小时 ↓"
+
+"ui.add":
+  en: "+ Add"
+  zh-CN: "+ 添加"
+
+"ui.next":
+  en: "Next →"
+  zh-CN: "下一个 →"
+
+"ui.sync":
+  en: "Session sync"
+  zh-CN: "会话同步"
+
+"ui.syncNow":
+  en: "Sync now"
+  zh-CN: "立即同步"
+
+"ui.auto":
+  en: "Background sync"
+  zh-CN: "自动后台同步"
+
+"ui.autoOff":
+  en: "Off · when on, checks every minute; turn off any time"
+  zh-CN: "已关闭 · 打开后每分钟在后台检查一次，随时可关"
+
+"ui.autoOnText":
+  en: "On · checks every minute in the background"
+  zh-CN: "已开启 · 每分钟在后台检查一次"
+
+"ui.backup":
+  en: "Backups"
+  zh-CN: "备份"
+
+"ui.backupLine":
+  en: "Latest %{when} · %{n} kept"
+  zh-CN: "最近一次 %{when} · 保留 %{n} 份"
+
+"ui.manage":
+  en: "Manage"
+  zh-CN: "管理备份"
+
+"ui.colAccount":
+  en: "Account"
+  zh-CN: "账号"
+
+"ui.col5":
+  en: "5 hours"
+  zh-CN: "5 小时"
+
+"ui.col7":
+  en: "7 days"
+  zh-CN: "7 天"
+
+"ui.colState":
+  en: "Status"
+  zh-CN: "状态"
+
+"ui.colAction":
+  en: "Action"
+  zh-CN: "操作"
+
+"ui.inUse":
+  en: "In use"
+  zh-CN: "使用中"
+
+"ui.switch":
+  en: "Switch"
+  zh-CN: "切换"
+
+"ui.relogin":
+  en: "Sign in again"
+  zh-CN: "重新登录"
+
+"ui.legend":
+  en: "Needs attention · usage ≥ 80%"
+  zh-CN: "需要处理 · 用量 ≥ 80%"
+
+"ui.heroDesk":
+  en: "Desktop account in use"
+  zh-CN: "桌面端当前账号"
+
+"ui.heroCli":
+  en: "CLI account · claude command"
+  zh-CN: "CLI 当前账号 · claude 命令"
+
+"ui.footDesk":
+  en: "Switching the Desktop account restarts Claude"
+  zh-CN: "切换桌面端账号会重启 Claude"
+
+"ui.footCli":
+  en: "Accounts are kept in this Mac’s Keychain · no cswap needed"
+  zh-CN: "账号存在本机钥匙串 · 无需安装 cswap"
+
+"ui.valid":
+  en: "Valid"
+  zh-CN: "有效"
+
+"ui.saved":
+  en: "Sign-in saved"
+  zh-CN: "登录已保存"
+
+"ui.refreshSt":
+  en: "Renews on switch"
+  zh-CN: "切换时刷新"
+
+"ui.dead":
+  en: "Expired"
+  zh-CN: "已失效"
+
+"ui.none":
+  en: "Sign-in needed"
+  zh-CN: "需要登录"
+
+"ui.noReading":
+  en: "No reading"
+  zh-CN: "读不到用量"
+
+"ui.notStarted":
+  en: "Not started"
+  zh-CN: "未开始"
+
+"ui.lastSync":
+  en: "Last synced %{ago}"
+  zh-CN: "上次同步 %{ago}"
+
+"ui.heroSubDesk":
+  en: "%{plan} · chats shared across %{n} accounts"
+  zh-CN: "%{plan} · 对话已在 %{n} 个账号间同步"
+
+"ui.desktopUnaffected":
+  en: "Desktop unaffected"
+  zh-CN: "不影响桌面端"
+
+"ui.noCurrent":
+  en: "No current account"
+  zh-CN: "当前未登录"
+
+"ui.slot":
+  en: "slot %{n}"
+  zh-CN: "第 %{n} 个"
+
+"ui.resets":
+  en: "resets %{x}"
+  zh-CN: "%{x} 重置"
+
+"ui.unknown":
+  en: "Unknown"
+  zh-CN: "未知"
+
+"ui.empty":
+  en: "No accounts to show. Use + Add to save a sign-in."
+  zh-CN: "暂无账号。点击「+ 添加」保存登录。"
+
+"backup.title":
+  en: "Session backups"
+  zh-CN: "会话备份"
+
+"backup.subtitle":
+  en: "Local session history · on this Mac · never uploaded"
+  zh-CN: "本地会话记录 · 存在本机 · 不上传"
+
+"backup.now":
+  en: "Back up now"
+  zh-CN: "立即备份"
+
+"backup.saved":
+  en: "Backup saved"
+  zh-CN: "备份已保存"
+
+"backup.time":
+  en: "Time"
+  zh-CN: "时间"
+
+"backup.reason":
+  en: "Source"
+  zh-CN: "来源"
+
+"backup.size":
+  en: "Size"
+  zh-CN: "大小"
+
+"backup.reveal":
+  en: "Reveal in Finder"
+  zh-CN: "在 Finder 中显示"
+
+"backup.keep":
+  en: "Keep latest"
+  zh-CN: "保留最近"
+
+"backup.schedule":
+  en: "Automatic during sync, at least %{minutes} minutes apart; also before restore. The baseline is always kept."
+  zh-CN: "同步时每隔至少 %{minutes} 分钟自动备份；恢复前也会备份。初始备份始终保留。"
+
+"backup.accounts":
+  en: "%{n} accounts"
+  zh-CN: "%{n} 个账号"
+
+"capture.title":
+  en: "Add CLI account"
+  zh-CN: "添加 CLI 账号"
+
+"capture.intro":
+  en: "CCSwift saves the account currently signed in in Terminal. Run this command and sign in with the account you want to add."
+  zh-CN: "CCSwift 保存的是终端里当前登录的账号。先在终端运行下面的命令，用要添加的账号登录。"
+
+"capture.updateIntro":
+  en: "In Terminal, sign in again as %{email} in %{org}. The saved slot stays the same."
+  zh-CN: "在终端用 %{email}（%{org}）重新登录，保存的位置不变。"
+
+"capture.copy":
+  en: "Copy"
+  zh-CN: "复制"
+
+"capture.terminal":
+  en: "Open Terminal"
+  zh-CN: "打开终端"
+
+"capture.poll":
+  en: "Terminal login is checked every 2 seconds."
+  zh-CN: "每 2 秒检查一次终端登录状态。"
+
+"capture.waiting":
+  en: "Waiting for terminal login…"
+  zh-CN: "等待终端登录…"
+
+"capture.credentials":
+  en: "%{email} — waiting for terminal credentials…"
+  zh-CN: "%{email} — 等待终端凭据…"
+
+"capture.detected":
+  en: "Detected: %{email} · %{org}"
+  zh-CN: "已检测到 %{email} · %{org}"
+
+"capture.existing":
+  en: "Already in slot %{slot}"
+  zh-CN: "已在第 %{slot} 个"
+
+"capture.mismatch":
+  en: "This is not %{email} in the saved organization. Sign in to that account first."
+  zh-CN: "这不是 %{email} 在已保存组织中的登录，请先登录该账号。"
+
+"capture.saved":
+  en: "Login saved. Desktop is unchanged."
+  zh-CN: "登录已保存，桌面端不变。"
+
+"capture.done":
+  en: "Done"
+  zh-CN: "完成"
+
+"capture.saving":
+  en: "Saving…"
+  zh-CN: "正在保存…"
+
+"capture.update":
+  en: "Update login"
+  zh-CN: "更新登录"
+
+"capture.save":
+  en: "Save account"
+  zh-CN: "保存账号"
+
+"capture.changed":
+  en: "Terminal login changed; review the detected account and try again"
+  zh-CN: "终端登录已改变，请确认检测到的账号后重试"
+
+"capture.already":
+  en: "Already saved in slot %{slot}; use Update login"
+  zh-CN: "已保存在第 %{slot} 个，请使用「更新登录」"
+
+"capture.terminalFailed":
+  en: "Could not open Terminal. Open it manually and run claude auth login."
+  zh-CN: "无法打开终端，请手动打开并运行 claude auth login。"
+
+"backup.manual":
+  en: "Manual backup"
+  zh-CN: "手动备份"

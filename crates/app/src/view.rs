@@ -1,10 +1,7 @@
-//! The main window: a picture of your accounts and one sentence about them, the switch that keeps
-//! them in step, the accounts themselves, and a note only when something needs you. Settings,
-//! snapshots and files live in a sheet behind the gear.
+//! Desktop and CLI tabs, inline usage, and the current-account and session-sync cards.
 
-use crate::hero;
 use crate::i18n::{t, tf, tn};
-use crate::model::{self, Account, Busy, Fullness, Login, Mood, PlanUse};
+use crate::model::{self, Account, Busy, Login};
 use crate::settings;
 use crate::store::{Store, StoreEvent};
 use crate::theme;
@@ -12,48 +9,38 @@ use cc_same_core::desktop::Quitting;
 use cc_same_core::report::Warning;
 use cc_same_core::retention::Limit;
 use cc_same_core::snapshot::Manifest;
-use gpui_kit::base::{Easing, Transition, transition};
 use gpui_kit::component::button::{Button, ButtonVariant, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
 use gpui_kit::component::notification::Notification;
-use gpui_kit::component::progress::Progress;
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::skeleton::Skeleton;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::switch::Switch;
-use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::tag::Tag;
-use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, Theme, TitleBar, WindowExt as _, h_flex, v_flex,
 };
 use gpui_kit::{
-    Anchor, Animation, AnimationExt as _, AnyElement, App, AppContext as _, Context, Div, ElementId, Entity,
-    FocusHandle, FontWeight, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Render,
-    SharedString, StatefulInteractiveElement as _, Styled as _, StyledText, Subscription, Window, actions, div,
-    ease_out_quint, prelude::FluentBuilder as _, px, rems,
+    Anchor, AnyElement, App, AppContext as _, Context, Div, Entity, FocusHandle, FontWeight, Hsla,
+    InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString, Styled as _, Subscription, Window,
+    actions, div, prelude::FluentBuilder as _, px, rems,
 };
 use std::rc::Rc;
-use std::time::Duration;
 
 actions!(cc_same, [Refresh, SyncNow, OpenSettings]);
 
 pub struct UniApp {
     store: Entity<Store>,
     page: usize,
-    /// The account under the pointer, in the list or in the picture.
-    hovered: Option<SharedString>,
-    /// False until the first frame with data has been drawn, so the rings fly in and the
-    /// numbers count up.
-    gathered: bool,
+    search: Option<Entity<InputState>>,
+    sort_usage: bool,
+    mark: Option<std::sync::Arc<gpui_kit::RenderImage>>,
     focus: FocusHandle,
     _subscriptions: Vec<Subscription>,
 }
 
 impl UniApp {
     pub fn new(store: Entity<Store>, window: &mut Window, cx: &mut Context<Self>) -> UniApp {
-        let subscriptions = vec![
+        let mut subscriptions = vec![
             cx.observe_window_appearance(window, |_, _, cx| cx.notify()),
             cx.observe(&store, |_, _, cx| cx.notify()),
             cx.subscribe_in(&store, window, |_, _, event: &StoreEvent, window, cx| {
@@ -61,14 +48,48 @@ impl UniApp {
                 show_outcome(result, window, cx);
             }),
         ];
+        let search = cx.new(|cx| InputState::new(window, cx).placeholder(t("ui.search")));
+        subscriptions.push(cx.subscribe(&search, |_, _, _: &InputEvent, cx| cx.notify()));
+        cx.on_next_frame(window, |this, _, cx| {
+            this.store.update(cx, |store, cx| store.refresh_usage(cx));
+            cx.spawn(async move |this, cx| {
+                let mark = cx
+                    .background_executor()
+                    .spawn(async {
+                        crate::theme::load_mark(std::path::Path::new("/Applications/Claude.app/Contents/Resources"))
+                    })
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    this.mark = mark;
+                    cx.notify();
+                });
+            })
+            .detach();
+        });
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
-        UniApp { store, page: 0, hovered: None, gathered: false, focus, _subscriptions: subscriptions }
+        UniApp {
+            store,
+            page: 0,
+            search: Some(search),
+            sort_usage: false,
+            mark: None,
+            focus,
+            _subscriptions: subscriptions,
+        }
     }
 
     /// A still picture (screenshots): everything already in place.
     pub fn still(store: Entity<Store>, cx: &mut Context<Self>) -> UniApp {
-        UniApp { store, page: 0, hovered: None, gathered: true, focus: cx.focus_handle(), _subscriptions: Vec::new() }
+        UniApp {
+            store,
+            page: 0,
+            search: None,
+            sort_usage: false,
+            mark: None,
+            focus: cx.focus_handle(),
+            _subscriptions: Vec::new(),
+        }
     }
 
     pub fn store(&self) -> &Entity<Store> {
@@ -76,10 +97,6 @@ impl UniApp {
     }
 
     // ------------------------------------------------------------------ actions
-
-    fn refresh_cli(&mut self, cx: &mut Context<Self>) {
-        self.store.update(cx, |store, cx| store.refresh_cli(cx));
-    }
 
     fn sync_now(&mut self, cx: &mut Context<Self>) {
         self.store.update(cx, |store, cx| store.sync_now(cx));
@@ -97,7 +114,7 @@ impl UniApp {
             let (store, id) = (store.clone(), id.clone());
             alert
                 .title(tf("restore.title", &[("when", &when)]))
-                .description(t("restore.body"))
+                .description(format!("{} {}", t("restore.body"), t("settings.quit_to_restore")))
                 .confirm()
                 .ok_text(t("restore.ok"))
                 .cancel_text(t("dialog.cancel"))
@@ -110,7 +127,7 @@ impl UniApp {
         });
     }
 
-    fn confirm_fix_links(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn confirm_fix_links(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let store = self.store.clone();
         window.open_alert_dialog(cx, move |alert, _, _| {
             let store = store.clone();
@@ -129,7 +146,7 @@ impl UniApp {
 
     /// What sits at the end of an account's row: where Claude stands with it, or what one click
     /// does.
-    fn account_action(&self, a: &Account, cx: &mut Context<Self>) -> Option<AnyElement> {
+    fn account_action(&self, a: &Account, cx: &Context<Self>) -> Option<AnyElement> {
         let (busy, switching_to, signing_in) = {
             let store = self.store.read(cx);
             (store.busy, store.switching_to.clone(), store.signing_in.is_some())
@@ -184,7 +201,8 @@ impl UniApp {
                     Button::new(SharedString::from(format!("sign-in-{}", a.id)))
                         .small()
                         .ghost()
-                        .label(t("account.sign_in"))
+                        .text_color(theme::accent_text(cx))
+                        .label(t("ui.relogin"))
                         .disabled(busy.is_some())
                         .on_click(
                             cx.listener(move |this, _, window, cx| this.confirm_sign_in(name.clone(), window, cx)),
@@ -380,589 +398,411 @@ impl UniApp {
         }
     }
 
-    /// The account under the pointer, by ID (screenshots set it as well).
-    pub fn set_hovered(&mut self, key: Option<SharedString>, cx: &mut Context<Self>) {
-        if self.hovered != key {
-            self.hovered = key;
-            cx.notify();
-        }
+    fn render_pages(&self, cx: &mut Context<Self>) -> AnyElement {
+        let store = self.store.read(cx);
+        let count = if self.page == 0 {
+            store.accounts().len()
+        } else {
+            store.cli_accounts.as_ref().and_then(|a| a.as_ref().ok()).map_or(0, Vec::len)
+        };
+        h_flex()
+            .px(px(18.))
+            .pt(px(14.))
+            .gap_2()
+            .justify_between()
+            .child(h_flex().p(px(3.)).gap(px(3.)).rounded(px(10.)).bg(cx.theme().muted).children((0..2).map(|index| {
+                Button::new(if index == 0 { "desktop-tab" } else { "cli-tab" })
+                    .ghost()
+                    .w(px(if count > 4 { 83. } else { 113. }))
+                    .h(px(32.))
+                    .label(t(if index == 0 { "page.desktop" } else { "page.cli" }))
+                    .bg(if self.page == index {
+                        if cx.theme().is_dark() { theme::empty(cx) } else { cx.theme().background }
+                    } else {
+                        gpui_kit::transparent_black()
+                    })
+                    .text_color(if self.page == index { cx.theme().foreground } else { cx.theme().muted_foreground })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.page = index;
+                        cx.notify();
+                    }))
+            })))
+            .child(
+                h_flex()
+                    .gap_2()
+                    .when(count > 4, |el| {
+                        el.children(
+                            self.search
+                                .as_ref()
+                                .map(|input| div().w(px(120.)).child(Input::new(input).small().cleanable(true))),
+                        )
+                    })
+                    .child(Button::new("sort-usage").small().outline().label(t("ui.sort")).on_click(cx.listener(
+                        |this, _, _, cx| {
+                            this.sort_usage = true;
+                            cx.notify();
+                        },
+                    )))
+                    .child(
+                        Button::new("add-account").small().primary().label(t("ui.add")).bg(theme::jelly()).on_click(
+                            cx.listener(|this, _, window, cx| {
+                                if this.page == 1 {
+                                    crate::cli_login::open(this.store.clone(), None, window, cx);
+                                } else {
+                                    this.confirm_sign_in(None, window, cx);
+                                }
+                            }),
+                        ),
+                    ),
+            )
+            .into_any_element()
     }
 
-    // ------------------------------------------------------------------ rendering
-
-    fn render_pages(&self, cx: &mut Context<Self>) -> AnyElement {
-        h_flex()
-            .justify_center()
-            .px_5()
-            .pb_2()
+    fn render_title_bar(&self, cx: &mut Context<Self>) -> AnyElement {
+        let store = self.store.read(cx);
+        let latest = store
+            .cli_usage
+            .readings
+            .values()
+            .filter_map(|r| r.usage.map(|u| u.at))
+            .chain(store.overview.iter().flat_map(|o| o.usage.values().map(|u| u.at)))
+            .max_by(f64::total_cmp);
+        let updated =
+            latest.map(|at| tf("ui.updated", &[("ago", &crate::i18n::ago(at))])).unwrap_or_else(|| t("ui.noReading"));
+        TitleBar::new()
+            .h(px(52.))
+            .bg(cx.theme().background)
+            .border_color(cx.theme().border)
             .child(
-                TabBar::new("account-pages")
-                    .segmented()
-                    .selected_index(self.page)
+                h_flex()
+                    .w_full()
+                    .justify_between()
+                    .pr_3()
                     .child(
-                        Tab::new().aria_label(t("page.desktop")).child(
-                            div()
-                                .border_b_1()
-                                .border_color(if self.page == 0 {
-                                    cx.theme().foreground
-                                } else {
-                                    gpui_kit::transparent_black()
-                                })
-                                .child(t("page.desktop")),
-                        ),
+                        h_flex()
+                            .gap_2()
+                            .text_size(px(17.))
+                            .child("CCSwift")
+                            .children(self.mark.clone().map(|mark| gpui_kit::img(mark).size(px(17.)))),
                     )
                     .child(
-                        Tab::new().aria_label(t("page.cli")).child(
-                            div()
-                                .border_b_1()
-                                .border_color(if self.page == 1 {
-                                    cx.theme().foreground
-                                } else {
-                                    gpui_kit::transparent_black()
-                                })
-                                .child(t("page.cli")),
-                        ),
+                        h_flex()
+                            .gap_1()
+                            .child(div().text_size(px(13.)).text_color(cx.theme().muted_foreground).child(updated))
+                            .child(
+                                Button::new("refresh")
+                                    .ghost()
+                                    .small()
+                                    .icon(IconName::RefreshCw)
+                                    .tooltip(t("ui.refresh"))
+                                    .disabled(store.usage_loading)
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| {
+                                            this.store.update(cx, |s, cx| s.refresh_usage(cx))
+                                        }),
+                                    ),
+                            )
+                            .child(
+                                Button::new("open-settings")
+                                    .ghost()
+                                    .small()
+                                    .icon(IconName::Settings2)
+                                    .tooltip(t("settings.title"))
+                                    .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx))),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_current(&self, accounts: &[Account], cx: &Context<Self>) -> AnyElement {
+        let store = self.store.read(cx);
+        let cli = store.cli_accounts.as_ref().and_then(|r| r.as_ref().ok());
+        let current_cli = cli.and_then(|rows| rows.iter().find(|a| a.active));
+        let current_desktop = accounts.iter().find(|a| a.login == Login::SignedIn || a.open);
+        let email =
+            if self.page == 1 { current_cli.map(|a| a.email.clone()) } else { current_desktop.map(account_email) };
+        let email = email.unwrap_or_else(|| t("ui.noCurrent"));
+        let subtitle = if self.page == 1 {
+            current_cli
+                .map(|a| {
+                    format!(
+                        "{} · {} · {}",
+                        tf("ui.slot", &[("n", &a.slot)]),
+                        cli_status(store.cli_usage.readings.get(&a.slot)),
+                        t("ui.desktopUnaffected")
                     )
+                })
+                .unwrap_or_else(|| t("ui.desktopUnaffected"))
+        } else if store.mood().settled() {
+            tf("ui.heroSubDesk", &[("plan", &"—"), ("n", &accounts.len())])
+        } else {
+            format!("— · {}", store.mood().title())
+        };
+        let next_cli = cli.and_then(|rows| {
+            let at = rows.iter().position(|a| a.active).unwrap_or(rows.len().saturating_sub(1));
+            (1..=rows.len()).map(|offset| &rows[(at + offset) % rows.len()]).find(|a| !a.active).map(|a| a.slot)
+        });
+        let can_next = if self.page == 1 {
+            next_cli.is_some() && store.cli_switching.is_none()
+        } else {
+            store.next_account().is_some() && store.busy.is_none()
+        };
+        h_flex()
+            .gap(px(14.))
+            .p(px(16.))
+            .rounded(px(16.))
+            .bg(theme::jelly())
+            .text_color(gpui_kit::white())
+            .border_1()
+            .border_color(gpui_kit::white().opacity(0.35))
+            .shadow(theme::jelly_shadow())
+            .child(
+                avatar(&email, true)
+                    .size(px(44.))
+                    .text_size(px(21.))
+                    .bg(gpui_kit::white().opacity(0.26))
+                    .border_1()
+                    .border_color(gpui_kit::white().opacity(0.5)),
+            )
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
                     .child(
-                        Tab::new().aria_label(t("page.usage")).child(
-                            div()
-                                .border_b_1()
-                                .border_color(if self.page == 2 {
-                                    cx.theme().foreground
-                                } else {
-                                    gpui_kit::transparent_black()
-                                })
-                                .child(t("page.usage")),
-                        ),
+                        h_flex()
+                            .gap_2()
+                            .text_size(px(12.5))
+                            .child(dot(gpui_kit::white()))
+                            .child(t(if self.page == 1 { "ui.heroCli" } else { "ui.heroDesk" })),
                     )
-                    .on_click(cx.listener(|this, index: &usize, _, cx| {
-                        this.page = *index;
-                        if this.page == 2 {
-                            this.store.update(cx, |s, cx| s.refresh_usage(cx));
-                        }
+                    .child(div().text_size(px(23.)).truncate().child(email))
+                    .child(div().text_size(px(13.)).truncate().child(subtitle)),
+            )
+            .child(
+                Button::new("next-account")
+                    .h(px(30.))
+                    .small()
+                    .outline()
+                    .label(t("ui.next"))
+                    .bg(gpui_kit::white().opacity(0.18))
+                    .text_color(gpui_kit::white())
+                    .border_color(gpui_kit::white().opacity(0.55))
+                    .disabled(!can_next)
+                    .on_click(cx.listener(move |this, _, window, cx| {
                         if this.page == 1 {
-                            this.refresh_cli(cx);
-                            this.store.update(cx, |s, cx| s.refresh_usage(cx));
+                            if let Some(slot) = next_cli {
+                                this.store.update(cx, |s, cx| s.switch_cli(slot, cx));
+                            }
+                        } else {
+                            this.confirm_next(window, cx);
                         }
-                        cx.notify();
                     })),
             )
             .into_any_element()
     }
 
-    fn render_usage(&self, cx: &Context<Self>) -> AnyElement {
-        use cc_same_core::usage::Usage;
-        use std::collections::BTreeMap;
+    fn render_background(&self, cx: &mut Context<Self>) -> AnyElement {
         let store = self.store.read(cx);
-        let muted = cx.theme().muted_foreground;
-        // One email row, preferring CLI readings with reset times.
-        let mut rows: BTreeMap<String, (Option<Usage>, bool, bool)> = BTreeMap::new();
-        for account in store.accounts() {
-            let email = account.email.unwrap_or(account.name);
-            let usage = store.overview.as_ref().and_then(|o| o.usage.get(&account.id)).copied();
-            let row = rows.entry(email).or_default();
-            row.1 = true;
-            if usage.is_some_and(|u| row.0.is_none_or(|old| u.at > old.at)) {
-                row.0 = usage;
-            }
-        }
-        if let Some(Ok(accounts)) = &store.cli_accounts {
-            for account in accounts {
-                rows.entry(account.email.clone()).or_default().2 = true;
-            }
-        }
-        let mut list = surface(cx).p_3().gap_4();
-        for (email, (desktop, _, cli)) in rows {
-            let reading = cli
-                .then(|| {
-                    store.cli_accounts.as_ref().and_then(|r| r.as_ref().ok()).and_then(|accounts| {
-                        accounts
-                            .iter()
-                            .filter(|a| a.email == email)
-                            .filter_map(|a| store.cli_usage.readings.get(&a.slot))
-                            .max_by_key(|r| r.usage.map(|u| u.at as i64))
-                    })
-                })
-                .flatten();
-            let cli_usage = reading.and_then(|r| r.usage);
-            let (source, usage) =
-                if cli_usage.is_some() { (t("page.cli"), cli_usage) } else { (t("page.desktop"), desktop) };
-            let detail = if let Some(usage) = usage {
-                format!("{source} · 更新于 {}", crate::i18n::ago(usage.at))
-            } else {
-                reading
-                    .and_then(|r| r.problem)
-                    .map(|p| p.message())
-                    .unwrap_or(if store.usage_loading { "loading…" } else { "unavailable" })
-                    .to_string()
-            };
-            list = list.child(
-                v_flex()
-                    .gap_2()
-                    .child(div().font_weight(FontWeight::MEDIUM).child(email.clone()))
-                    .child(usage_bars(&email, usage, reading.filter(|_| cli_usage.is_some()), cx))
-                    .child(div().text_size(rems(0.846)).text_color(muted).child(detail)),
-            );
-        }
-        v_flex()
-            .p_5()
-            .gap_3()
-            .child(
-                h_flex().justify_between().child(section_label(t("page.usage"), cx)).child(
-                    Button::new("refresh-usage")
-                        .small()
-                        .outline()
-                        .label(t(if store.usage_loading { "usage.refreshing" } else { "usage.refresh" }))
-                        .disabled(store.usage_loading)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.store.update(cx, |s, cx| s.refresh_usage(cx));
-                        })),
-                ),
-            )
-            .when_some(store.usage_error.as_ref(), |el, error| el.child(div().text_color(muted).child(error.clone())))
-            .child(list)
-            .into_any_element()
-    }
-
-    fn render_cli(&self, cx: &Context<Self>) -> AnyElement {
-        let muted = cx.theme().muted_foreground;
-        let mut list = surface(cx).p_1().gap_px();
-        let store = self.store.read(cx);
-        match &store.cli_accounts {
-            Some(Ok(accounts)) if !accounts.is_empty() => {
-                for account in accounts {
-                    let slot = account.slot;
-                    let reading = store.cli_usage.readings.get(&slot);
-                    let status = reading.map(|r| r.status()).unwrap_or("Unknown");
-                    let relogin = matches!(status, "Expired" | "Renews on switch");
-                    list = list.child(
-                        h_flex()
-                            .px_3()
-                            .py_3()
-                            .gap_3()
-                            .child(div().w(px(20.)).flex_shrink_0().text_color(muted).child(account.slot.to_string()))
-                            .child(
-                                v_flex()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .gap_1()
-                                    .child(div().font_weight(FontWeight::MEDIUM).child(account.email.clone()))
-                                    .when(
-                                        !account.organization.is_empty()
-                                            && account.organization != format!("{}'s Organization", account.email),
-                                        |column| {
-                                            column.child(
-                                                div()
-                                                    .text_size(rems(0.846))
-                                                    .text_color(muted)
-                                                    .child(account.organization.clone()),
-                                            )
-                                        },
-                                    )
-                                    .child(div().text_size(rems(0.846)).text_color(muted).child(status)),
-                            )
-                            .child(
-                                v_flex()
-                                    .gap_1()
-                                    .items_end()
-                                    .when(relogin, |row| {
-                                        row.child(
-                                            Button::new(SharedString::from(format!("cli-relogin-{slot}")))
-                                                .small()
-                                                .label("Sign in again")
-                                                .on_click(cx.listener(move |this, _, window, cx| {
-                                                    crate::cli_login::open(this.store.clone(), Some(slot), window, cx)
-                                                })),
-                                        )
-                                    })
-                                    .when(!account.active && status != "Expired", |row| {
-                                        row.child(
-                                            Button::new(SharedString::from(format!("cli-switch-{slot}")))
-                                                .small()
-                                                .ghost()
-                                                .label(t(if store.cli_switching == Some(slot) {
-                                                    "account.switching"
-                                                } else {
-                                                    "account.switch"
-                                                }))
-                                                .disabled(store.cli_switching.is_some())
-                                                .on_click(cx.listener(move |this, _, _, cx| {
-                                                    this.store.update(cx, |store, cx| store.switch_cli(slot, cx));
-                                                })),
-                                        )
-                                    })
-                                    .when(account.active, |row| {
-                                        row.child(Tag::secondary().small().rounded_full().child(
-                                            h_flex().gap_1p5().child(dot(cx.theme().primary)).child(t("cli.active")),
-                                        ))
-                                    }),
-                            ),
-                    );
-                }
-            }
-            result => {
-                let message = match result {
-                    None => t("cli.loading"),
-                    Some(Ok(_)) => t("cli.empty"),
-                    Some(Err(error)) => error.clone(),
-                };
-                list = list.child(div().px_3().py_3().text_color(muted).child(message));
-            }
-        }
-        v_flex()
-            .p_5()
-            .gap_2()
-            .child(h_flex().justify_between().child(section_label(t("cli.title"), cx)).child(
-                Button::new("add-cli").small().label("+ Add").on_click(
-                    cx.listener(|this, _, window, cx| crate::cli_login::open(this.store.clone(), None, window, cx)),
-                ),
-            ))
-            .child(list)
-            .into_any_element()
-    }
-
-    fn render_title_bar(&self, cx: &mut Context<Self>) -> AnyElement {
-        TitleBar::new()
-            .bg(gpui_kit::transparent_black())
-            .border_color(gpui_kit::transparent_black())
-            .child(
-                h_flex().w_full().justify_end().pr_2().child(
-                    Button::new("open-settings")
-                        .ghost()
-                        .small()
-                        .icon(IconName::Settings2)
-                        .tooltip(t("settings.title"))
-                        // Keep Windows' native caption hit-test off this button.
-                        .when(cfg!(windows), |button| button.occlude())
-                        .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx))),
-                ),
-            )
-            .into_any_element()
-    }
-
-    fn render_headline(
-        &mut self,
-        mood: Mood,
-        accounts: &[Account],
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Div {
-        let view = cx.entity().downgrade();
-        let on_hover: hero::OnHover = Rc::new(move |key, _, cx| {
-            let _ = view.update(cx, |this, cx| this.set_hovered(key, cx));
-        });
-        let gathered = self.gathered || mood == Mood::Loading;
-        let syncing: Vec<Account> = accounts.iter().filter(|a| a.has_lists).cloned().collect();
-        let picture = hero::rings(&syncing, mood, self.hovered.as_deref(), gathered, on_hover, window, cx);
-
-        // The count rolls up to its value when the window opens, and on to a new one.
-        let counted = |n: usize, window: &mut Window, cx: &mut Context<Self>| -> usize {
-            let target = if gathered { n as f32 } else { 0. };
-            let value = transition(
-                "headline-count",
-                target,
-                Transition::new(Duration::from_millis(900)).easing(Easing::EaseOut),
-                window,
-                cx,
-            );
-            value.round() as usize
-        };
-        let shown = match mood {
-            Mood::InSync { sessions, accounts } => Mood::InSync { sessions: counted(sessions, window, cx), accounts },
-            Mood::Pending { sessions, other } if sessions > 0 => {
-                Mood::Pending { sessions: counted(sessions, window, cx), other }
-            }
-            other => other,
-        };
-
-        let (overview, busy) = {
-            let store = self.store.read(cx);
-            (store.overview.clone(), store.busy)
-        };
-        let theme = cx.theme();
-        let muted = theme.muted_foreground;
-        let foreground = theme.foreground;
-        let synced = overview
+        let on = store.background_on();
+        let disabled = store.busy.is_some() || store.overview.is_none();
+        let detail = store
+            .overview
             .as_ref()
             .and_then(|o| o.last_sync.as_ref())
-            .filter(|_| matches!(mood, Mood::InSync { .. } | Mood::Waiting(_)))
-            .map(|ls| tf("synced_ago", &[("ago", &crate::i18n::ago(ls.at))]));
-        let running = overview.as_ref().is_some_and(|o| o.app.running);
-        let action: Option<AnyElement> = match mood {
-            Mood::Pending { .. } => Some(
+            .map(|s| tf("ui.lastSync", &[("ago", &crate::i18n::ago(s.at))]))
+            .unwrap_or_else(|| t("ui.notStarted"));
+        let latest = store.snapshots.last().map(|s| model::snapshot_when(&s.id)).unwrap_or_else(|| t("ui.notStarted"));
+        let backup = tf("ui.backupLine", &[("when", &latest), ("n", &store.snapshots.len())]);
+        let line =
+            |icon, title, detail, action: AnyElement| {
+                h_flex()
+                    .h(px(50.))
+                    .px(px(14.))
+                    .gap_3()
+                    .child(Icon::new(icon).small().text_color(cx.theme().muted_foreground))
+                    .child(v_flex().flex_1().min_w_0().child(title).child(
+                        div().text_size(px(12.5)).text_color(cx.theme().muted_foreground).truncate().child(detail),
+                    ))
+                    .child(action)
+            };
+        v_flex()
+            .rounded(px(14.))
+            .border_1()
+            .border_color(cx.theme().border)
+            .bg(cx.theme().group_box)
+            .child(line(
+                IconName::RefreshCw,
+                t("ui.sync"),
+                format!("{detail} · {}", store.mood().title()),
                 Button::new("sync-now")
-                    .primary()
-                    .label(t("action.sync_now"))
-                    .icon(IconName::RefreshCw)
-                    .disabled(busy.is_some())
+                    .small()
+                    .outline()
+                    .label(t("ui.syncNow"))
+                    .disabled(disabled)
                     .on_click(cx.listener(|this, _, _, cx| this.sync_now(cx)))
                     .into_any_element(),
-            ),
-            Mood::Linked(_) => Some(
-                v_flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        Button::new("fix-links")
-                            .primary()
-                            .label(t("action.fix_folders"))
-                            .disabled(running || busy.is_some())
-                            .on_click(cx.listener(|this, _, window, cx| this.confirm_fix_links(window, cx))),
+            ))
+            .child(div().h(px(1.)).bg(cx.theme().border))
+            .child(line(
+                IconName::CircleCheck,
+                t("ui.auto"),
+                t(if on { "ui.autoOnText" } else { "ui.autoOff" }),
+                Switch::new("background-sync")
+                    .checked(on)
+                    .disabled(disabled)
+                    .on_click(
+                        cx.listener(|this, on: &bool, _, cx| this.store.update(cx, |s, cx| s.set_background(*on, cx))),
                     )
-                    .when(running, |el| {
-                        el.child(div().text_size(rems(0.923)).text_color(muted).child(t("hint.quit_first")))
-                    })
                     .into_any_element(),
-            ),
-            _ => None,
-        };
-
-        let detail = shown.detail();
-        let words = v_flex()
-            .relative()
-            .items_center()
-            .gap_1()
-            .child(
-                div()
-                    .text_size(rems(1.54))
-                    .line_height(rems(1.9))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_center()
-                    .child(shown.title()),
-            )
-            .when(!detail.is_empty(), |el| {
-                el.child(div().text_center().text_color(muted).child(emphasize_numbers(detail, foreground)))
-            })
-            // A new sentence rises into place; a number that changes does not replay it.
-            .with_animation(
-                ElementId::Name(format!("headline-{}", mood_kind(mood)).into()),
-                Animation::new(Duration::from_millis(360)).with_easing(ease_out_quint()),
-                |el, t| el.opacity(t).top(px(5. * (1. - t))),
-            );
-
-        v_flex()
-            .items_center()
-            .px_8()
-            .pb_6()
-            .child(picture)
-            .child(words)
-            .when_some(synced, |el, synced| {
-                el.child(div().mt_1p5().text_size(rems(0.923)).text_color(muted.opacity(0.8)).child(synced))
-            })
-            .when_some(action, |el, action| el.child(div().mt_4().child(action)))
+            ))
+            .child(div().h(px(1.)).bg(cx.theme().border))
+            .child(line(
+                IconName::FolderOpen,
+                t("ui.backup"),
+                backup,
+                Button::new("backups")
+                    .small()
+                    .outline()
+                    .label(t("ui.manage"))
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        crate::backups::open(this.store.clone(), cx.entity(), window, cx)
+                    }))
+                    .into_any_element(),
+            ))
+            .into_any_element()
     }
 
-    fn render_background(&self, cx: &mut Context<Self>) -> AnyElement {
-        let (overview, busy, switched_on_at) = {
-            let store = self.store.read(cx);
-            (store.overview.clone(), store.busy, store.switched_on_at)
+    fn render_table(&self, accounts: &[Account], cx: &mut Context<Self>) -> AnyElement {
+        let store = self.store.read(cx);
+        let query = self.search.as_ref().map(|s| s.read(cx).value().to_lowercase()).unwrap_or_default();
+        let count = if self.page == 0 {
+            accounts.len()
+        } else {
+            store.cli_accounts.as_ref().and_then(|r| r.as_ref().ok()).map_or(0, Vec::len)
         };
-        let theme = cx.theme();
-        let st = overview.as_ref().map(|o| o.service.clone()).unwrap_or_default();
-        let alive = overview.as_deref().is_some_and(model::agent_alive);
-        // Just switched on: the agent is starting and has not checked in yet.
-        let starting = switched_on_at.is_some_and(|t| t.elapsed() < Duration::from_secs(90));
-        let (line, tone): (String, Hsla) = if st.installed && alive {
-            let checked =
-                overview.as_ref().and_then(|o| o.heartbeat.as_ref()).map(|h| crate::i18n::ago(h.heartbeat_at));
-            (tf("background.on", &[("ago", &checked.unwrap_or_else(|| t("time.just_now")))]), theme.muted_foreground)
-        } else if st.installed && starting {
-            (t("background.starting"), theme.muted_foreground)
-        } else if st.installed {
-            let mut line = t("background.stalled");
-            if cfg!(target_os = "macos") {
-                line = format!("{line} {}", t("background.stalled_mac"));
+        let query = if count > 4 { query } else { String::new() };
+        let mut rows = Vec::new();
+        if self.page == 0 {
+            let mut accounts = accounts.to_vec();
+            if self.sort_usage {
+                accounts.sort_by(|a, b| {
+                    desktop_usage(store, b)
+                        .0
+                        .and_then(|u| u.five_hour)
+                        .unwrap_or(-1.)
+                        .total_cmp(&desktop_usage(store, a).0.and_then(|u| u.five_hour).unwrap_or(-1.))
+                });
             }
-            (line, theme.warning)
-        } else if st.legacy {
-            (t("background.legacy"), theme.warning)
-        } else {
-            (t("background.off"), theme.muted_foreground)
-        };
-        let switching = busy == Some(Busy::Service);
-        let store = self.store.clone();
-        surface(cx)
-            .child(
-                h_flex()
-                    .gap_4()
-                    .px_4()
-                    .py_3()
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .gap_0p5()
-                            .child(div().font_weight(FontWeight::MEDIUM).child(t("background.title")))
-                            .child(
-                                h_flex()
-                                    .gap_1p5()
-                                    .text_size(rems(0.923))
-                                    .text_color(tone)
-                                    .when(st.installed && alive, |el| el.child(dot(theme.success)))
-                                    .child(div().min_w_0().child(line)),
-                            ),
-                    )
-                    .child(if switching {
-                        Spinner::new().small().into_any_element()
-                    } else {
-                        Switch::new("background")
-                            .checked(st.installed)
-                            .disabled(busy.is_some() || overview.is_none())
-                            .on_change(move |on: &bool, _, cx| {
-                                let on = *on;
-                                store.update(cx, |store, cx| store.set_background(on, cx));
-                            })
-                            .into_any_element()
-                    }),
-            )
-            .into_any_element()
-    }
-
-    fn render_accounts(&self, accounts: &[Account], cx: &mut Context<Self>) -> AnyElement {
-        let (loading, switching) = {
-            let store = self.store.read(cx);
-            (store.overview.is_none(), store.overview.as_ref().is_some_and(|o| o.logins.supported))
-        };
-        let actions: Vec<Option<AnyElement>> = accounts.iter().map(|a| self.account_action(a, cx)).collect();
-        let add = switching.then(|| {
-            Button::new("add-account")
-                .ghost()
-                .xsmall()
-                .icon(IconName::Plus)
-                .tooltip(t("accounts.add"))
-                .disabled(self.store.read(cx).busy.is_some() || self.store.read(cx).signing_in.is_some())
-                .on_click(cx.listener(|this, _, window, cx| this.confirm_sign_in(None, window, cx)))
-        });
-        let theme = cx.theme();
-        let rows: Vec<AnyElement> = if loading {
-            (0..3).map(|i| skeleton_row(i, cx)).collect()
-        } else {
-            accounts
-                .iter()
-                .zip(actions)
-                .map(|(a, action)| {
-                    let key: SharedString = a.id.clone().into();
-                    let hovered = self.hovered.as_ref() == Some(&key);
-                    let hover_key = key.clone();
-                    let row = h_flex()
-                        .id(ElementId::Name(format!("account-{}", a.id).into()))
-                        .gap_3()
-                        .px_3()
-                        .py_2()
-                        .rounded(theme.radius)
-                        .when(hovered, |el| el.bg(theme.list_hover))
-                        .on_hover(cx.listener(move |this, inside: &bool, _, cx| {
-                            let key = inside.then(|| hover_key.clone());
-                            if key.is_some() || this.hovered.as_ref() == Some(&hover_key) {
-                                this.set_hovered(key, cx);
-                            }
-                        }))
-                        .when(a.excluded, |el| el.opacity(0.55))
-                        .child(
-                            div()
-                                .size(px(24.))
-                                .flex_none()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded_full()
-                                .border_1()
-                                .border_color(theme.border)
-                                .text_color(theme.foreground)
-                                .text_size(rems(0.846))
-                                .child(a.initials()),
+            for a in accounts.iter().filter(|a| account_email(a).to_lowercase().contains(&query)) {
+                let active = a.open || a.login == Login::SignedIn;
+                let (usage, reading) = desktop_usage(store, a);
+                let action = if active {
+                    in_use(cx)
+                } else {
+                    self.account_action(a, cx).unwrap_or_else(|| div().into_any_element())
+                };
+                rows.push(account_row(
+                    &account_email(a),
+                    "—".into(),
+                    active,
+                    usage,
+                    reading,
+                    t(if a.login == Login::Unknown { "ui.none" } else { "ui.saved" }),
+                    a.login == Login::Unknown,
+                    action,
+                    cx,
+                ));
+            }
+        } else if let Some(Ok(accounts)) = &store.cli_accounts {
+            let mut accounts = accounts.clone();
+            if self.sort_usage {
+                accounts.sort_by(|a, b| {
+                    store
+                        .cli_usage
+                        .readings
+                        .get(&b.slot)
+                        .and_then(|r| r.usage)
+                        .and_then(|u| u.five_hour)
+                        .unwrap_or(-1.)
+                        .total_cmp(
+                            &store
+                                .cli_usage
+                                .readings
+                                .get(&a.slot)
+                                .and_then(|r| r.usage)
+                                .and_then(|u| u.five_hour)
+                                .unwrap_or(-1.),
                         )
-                        .child(
-                            v_flex()
-                                .flex_1()
-                                .min_w_0()
-                                .child(
-                                    h_flex()
-                                        .gap_1p5()
-                                        .min_w_0()
-                                        .child(div().truncate().font_weight(FontWeight::MEDIUM).child(a.name.clone()))
-                                        // Naming is in the row's menu too, which people may not
-                                        // find; only accounts in the list have a name to give.
-                                        .when(hovered && a.number.is_some(), |el| {
-                                            let id = a.id.clone();
-                                            el.child(
-                                                Button::new(SharedString::from(format!("name-{}", a.id)))
-                                                    .ghost()
-                                                    .xsmall()
-                                                    .icon(gpui_kit::assets::IconName::Pencil)
-                                                    .tooltip(t("account.name_tip"))
-                                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                                        this.open_name(id.clone(), window, cx)
-                                                    })),
-                                            )
-                                        }),
-                                )
-                                .child(
-                                    h_flex()
-                                        .min_w_0()
-                                        .text_size(rems(0.923))
-                                        .text_color(if a.broken { theme.danger } else { theme.muted_foreground })
-                                        .child(div().when(!a.broken, |el| el.truncate()).child(a.detail()))
-                                        .when_some(a.usage.filter(|_| !a.broken && !a.excluded), |el, usage| {
-                                            el.child(plan_use(&a.id, usage, cx))
-                                        }),
-                                ),
-                        )
-                        .children(action);
-                    // An account in the list can be named, sit out of "Next Account", or leave the list.
-                    let Some(_) = a.number else { return row.into_any_element() };
-                    let view = cx.entity().downgrade();
-                    let store = self.store.clone();
-                    let (id, name, in_rotation) = (a.id.clone(), a.name.clone(), !a.sits_out);
-                    let removable = a.login != Login::SignedIn;
-                    row.context_menu(move |menu, _, _| {
-                        let (view, store, id, name) = (view.clone(), store.clone(), id.clone(), name.clone());
-                        let (naming, namer, toggle) = (id.clone(), view.clone(), id.clone());
-                        let menu = menu
-                            .item(PopupMenuItem::new(t("account.name")).on_click(move |_, window, cx| {
-                                let account = naming.clone();
-                                let _ = namer.update(cx, |this, cx| this.open_name(account, window, cx));
-                            }))
-                            .item(PopupMenuItem::new(t("account.rotation")).checked(in_rotation).on_click(
-                                move |_, _, cx| {
-                                    let account = toggle.clone();
-                                    store.update(cx, |store, cx| store.set_in_rotation(account, !in_rotation, cx));
-                                },
-                            ));
-                        if !removable {
-                            return menu;
-                        }
-                        menu.separator().item(PopupMenuItem::new(t("account.remove")).on_click(move |_, window, cx| {
-                            let (id, name) = (id.clone(), name.clone());
-                            let _ = view.update(cx, |this, cx| this.confirm_remove(id, name, window, cx));
+                });
+            }
+            for a in accounts.iter().filter(|a| a.email.to_lowercase().contains(&query)) {
+                let slot = a.slot;
+                let reading = store.cli_usage.readings.get(&slot);
+                let expired = reading.is_some_and(|r| r.status() == "Expired");
+                let action = if expired {
+                    Button::new(SharedString::from(format!("cli-relogin-{slot}")))
+                        .small()
+                        .ghost()
+                        .text_color(theme::accent_text(cx))
+                        .label(t("ui.relogin"))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            crate::cli_login::open(this.store.clone(), Some(slot), window, cx)
                         }))
-                    })
-                    .into_any_element()
-                })
-                .collect()
-        };
-        let empty = rows.is_empty();
-        v_flex()
-            .gap_2()
-            .child(
-                h_flex()
-                    .px_1()
-                    .h(px(20.))
-                    .justify_between()
-                    .child(section_label(t("accounts.title"), cx))
-                    .child(h_flex().gap_2().children(add)),
-            )
-            .child(surface(cx).p_1().gap_px().children(rows).when(empty, |el| {
-                el.child(
-                    div()
-                        .px_3()
-                        .py_3()
-                        .text_size(rems(0.923))
-                        .text_color(cx.theme().muted_foreground)
-                        .child(t("accounts.empty")),
-                )
-            }))
-            .into_any_element()
+                        .into_any_element()
+                } else if a.active {
+                    in_use(cx)
+                } else {
+                    Button::new(SharedString::from(format!("cli-switch-{slot}")))
+                        .small()
+                        .outline()
+                        .label(t(if store.cli_switching == Some(slot) { "account.switching" } else { "ui.switch" }))
+                        .disabled(store.cli_switching.is_some())
+                        .on_click(
+                            cx.listener(move |this, _, _, cx| this.store.update(cx, |s, cx| s.switch_cli(slot, cx))),
+                        )
+                        .into_any_element()
+                };
+                rows.push(account_row(
+                    &a.email,
+                    tf("ui.slot", &[("n", &slot)]),
+                    a.active,
+                    reading.and_then(|r| r.usage),
+                    reading,
+                    cli_status(reading),
+                    expired,
+                    action,
+                    cx,
+                ));
+            }
+        }
+        let mut table = v_flex().child(
+            h_flex()
+                .h(px(30.))
+                .gap_3()
+                .text_size(px(12.5))
+                .text_color(cx.theme().muted_foreground)
+                .border_b_1()
+                .border_color(cx.theme().border)
+                .child(div().flex_1().min_w_0().child(format!("{} · {count}", t("ui.colAccount"))))
+                .child(div().w(px(112.)).child(t("ui.col5")))
+                .child(div().w(px(112.)).child(t("ui.col7")))
+                .child(div().w(px(96.)).child(t("ui.colState")))
+                .child(div().w(px(90.)).text_right().child(t("ui.colAction"))),
+        );
+        if rows.is_empty() {
+            let message = if self.page == 1 {
+                match &store.cli_accounts {
+                    None => t("cli.loading"),
+                    Some(Err(e)) => e.clone(),
+                    _ => t("ui.empty"),
+                }
+            } else {
+                t("ui.empty")
+            };
+            table = table.child(div().py_4().text_color(cx.theme().muted_foreground).child(message));
+        }
+        table.children(rows).into_any_element()
     }
 
     fn render_notices(&self, accounts: &[Account], cx: &mut Context<Self>) -> Vec<AnyElement> {
@@ -1083,56 +923,47 @@ impl UniApp {
 
 impl Render for UniApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (theme_choice, mood, accounts, loaded) = {
+        let (choice, accounts) = {
             let store = self.store.read(cx);
-            (store.theme(), store.mood(), store.accounts(), store.overview.is_some())
+            (store.theme(), store.accounts())
         };
-        theme::follow(theme_choice, window, cx);
-        if loaded && !self.gathered {
-            cx.on_next_frame(window, |this, _, cx| {
-                this.gathered = true;
-                cx.notify();
-            });
+        theme::follow(choice, window, cx);
+        if let Some(search) = &self.search {
+            let placeholder = t("ui.search");
+            if search.read(cx).presentation().placeholder().as_ref() != placeholder {
+                search.update(cx, |input, cx| input.set_placeholder(placeholder, window, cx));
+            }
         }
-        let content = if self.page == 2 {
-            self.render_usage(cx)
-        } else if self.page == 1 {
-            self.render_cli(cx)
-        } else {
-            let headline = self.render_headline(mood, &accounts, window, cx);
-            let background = self.render_background(cx);
-            let list = self.render_accounts(&accounts, cx);
-            let notices = self.render_notices(&accounts, cx);
-            v_flex()
-                .pb_6()
-                .child(headline)
-                .child(v_flex().px_5().gap_5().children(notices).child(background).child(list))
-                .into_any_element()
-        };
-        let (background_color, text_color) = {
-            let theme = cx.theme();
-            (theme.background, theme.foreground)
-        };
+        let content = v_flex()
+            .px(px(18.))
+            .py(px(14.))
+            .gap(px(12.))
+            .child(self.render_current(&accounts, cx))
+            .when(self.page == 0, |el| el.child(self.render_background(cx)))
+            .child(self.render_table(&accounts, cx))
+            .child(
+                h_flex()
+                    .justify_between()
+                    .text_size(px(12.))
+                    .text_color(cx.theme().muted_foreground)
+                    .child(t(if self.page == 0 { "ui.footDesk" } else { "ui.footCli" }))
+                    .child(div().text_color(theme::accent_text(cx)).child(t("ui.legend"))),
+            )
+            .when(self.page == 0, |el| el.children(self.render_notices(&accounts, cx)));
         v_flex()
             .relative()
             .key_context("UniApp")
             .track_focus(&self.focus)
-            .on_action(cx.listener(|this, _: &Refresh, _, cx| {
-                if this.page == 2 {
-                    this.store.update(cx, |s, cx| s.refresh_usage(cx));
-                } else if this.page == 1 {
-                    this.refresh_cli(cx);
-                    this.store.update(cx, |s, cx| s.refresh_usage(cx));
-                } else {
-                    this.store.update(cx, |s, cx| s.refresh(cx));
-                }
-            }))
+            .on_action(cx.listener(|this, _: &Refresh, _, cx| this.store.update(cx, |s, cx| s.refresh_usage(cx))))
             .on_action(cx.listener(|this, _: &SyncNow, _, cx| this.sync_now(cx)))
             .on_action(cx.listener(|this, _: &OpenSettings, window, cx| this.open_settings(window, cx)))
             .on_action(cx.listener(|_, _: &crate::CloseWindow, window, _| window.remove_window()))
             .size_full()
-            .bg(background_color)
-            .text_color(text_color)
+            .bg(cx.theme().background)
+            .text_color(cx.theme().foreground)
+            .font_family(theme::font())
+            .font_weight(FontWeight::NORMAL)
+            .text_size(px(14.))
             .child(self.render_title_bar(cx))
             .child(self.render_pages(cx))
             .child(div().id("content").flex_1().min_h_0().overflow_y_scrollbar().child(content))
@@ -1162,109 +993,8 @@ fn centered(note: Notification, window: &mut Window, cx: &mut App) -> Notificati
     note.placement(Anchor::BottomLeft)
 }
 
-/// Which headline is showing, ignoring its numbers.
-fn mood_kind(mood: Mood) -> &'static str {
-    match mood {
-        Mood::Loading => "loading",
-        Mood::Missing => "missing",
-        Mood::Single => "single",
-        Mood::Linked(_) => "linked",
-        Mood::Syncing { .. } => "syncing",
-        Mood::Pending { .. } => "pending",
-        Mood::Waiting(_) => "waiting",
-        Mood::InSync { .. } => "in-sync",
-    }
-}
-
-/// A placeholder row while the accounts load.
-fn skeleton_row(i: usize, cx: &App) -> AnyElement {
-    h_flex()
-        .gap_3()
-        .px_3()
-        .py_2()
-        .child(Skeleton::new().size(px(24.)).rounded_full())
-        .child(
-            v_flex()
-                .flex_1()
-                .gap_1p5()
-                .child(Skeleton::new().h(rems(0.8)).w(rems([9., 11., 7.5][i % 3])).rounded(cx.theme().radius))
-                .child(Skeleton::new().secondary().h(rems(0.7)).w(rems(5.5)).rounded(cx.theme().radius)),
-        )
-        .into_any_element()
-}
-
-/// "· 7d 58%" after an account's sessions: the fuller window, tinted as the plan fills up, and
-/// "· 3 h ago" once Claude has not read it lately; both windows, and when Claude read them, on
-/// hover, with how to have Claude read the open account's again.
-fn plan_use(id: &str, usage: PlanUse, cx: &App) -> AnyElement {
-    let theme = cx.theme();
-    let color = match usage.fullness() {
-        Fullness::Roomy => theme.muted_foreground,
-        Fullness::Nearly => theme.warning,
-        Fullness::Full => theme.danger,
-    };
-    let hint = usage.stale && usage.in_use;
-    let key = match (hint, cfg!(target_os = "macos")) {
-        (false, _) => "usage.tip",
-        (true, true) => "usage.stale.mac",
-        (true, false) => "usage.stale.other",
-    };
-    let tip = tf(key, &[("usage", &usage.text()), ("ago", &crate::i18n::ago(usage.at as f64))]);
-    h_flex()
-        .id(ElementId::Name(format!("usage-{id}").into()))
-        .flex_none()
-        .child(div().px_1().child("·"))
-        .child(div().text_color(color).child(usage.short()))
-        .when_some(usage.age(), |el, age| el.child(div().px_1().child("·")).child(age))
-        .tooltip(move |window, cx| {
-            let tip = tip.clone();
-            // A tooltip is laid out as narrow as its content allows, which for text is one line:
-            // the hint, too long for that, gets a width of its own to wrap in.
-            match hint {
-                true => Tooltip::element(move |_, _| div().max_w(px(280.)).child(tip.clone())),
-                false => Tooltip::new(tip),
-            }
-            .build(window, cx)
-        })
-        .into_any_element()
-}
-
-/// The raised surface every group of controls sits on.
-pub(crate) fn surface(cx: &App) -> Div {
-    let theme = cx.theme();
-    v_flex()
-        .bg(theme.group_box)
-        .border_1()
-        .border_color(theme.border)
-        .rounded(theme.radius_lg)
-        .shadow(theme::card_shadow(cx))
-}
-
-fn section_label(text: String, cx: &App) -> impl IntoElement {
-    div().text_size(rems(0.846)).font_weight(FontWeight::MEDIUM).text_color(cx.theme().muted_foreground).child(text)
-}
-
 fn dot(color: Hsla) -> impl IntoElement {
     div().size(px(6.)).flex_none().rounded_full().bg(color)
-}
-
-/// Numbers in a sentence carry the news, so they get the full text color.
-fn emphasize_numbers(text: String, color: Hsla) -> StyledText {
-    let mut runs = Vec::new();
-    let mut start = None;
-    for (i, c) in text.char_indices().chain(std::iter::once((text.len(), ' '))) {
-        match (c.is_ascii_digit(), start) {
-            (true, None) => start = Some(i),
-            (false, Some(s)) => {
-                let style =
-                    HighlightStyle { color: Some(color), font_weight: Some(FontWeight::MEDIUM), ..Default::default() };
-                runs.push((s..i, style));
-                start = None;
-            }
-            _ => {}
-        }
-    }
-    StyledText::new(text).with_highlights(runs)
 }
 
 // Two Lucide icons (ISC license) that GPUI Kit's default icon set leaves out.
@@ -1313,53 +1043,139 @@ fn notice(
                 .when(!actions.is_empty(), |el| el.child(h_flex().gap_2().children(actions))),
         )
         .when_some(close, |el, close| el.child(div().mt(px(-3.)).mr(px(-6.)).child(close)))
-        .with_animation(
-            ElementId::Name(format!("{id}-enter").into()),
-            Animation::new(Duration::from_millis(320)).with_easing(ease_out_quint()),
-            |el, t| el.opacity(t).top(px(-6. * (1. - t))),
-        )
         .into_any_element()
 }
 
-fn usage_bars(
-    id: &str,
+fn account_email(a: &Account) -> String {
+    a.email.clone().unwrap_or_else(|| tf("account.unnamed", &[("id", &cc_same_core::short(&a.id))]))
+}
+fn desktop_usage<'a>(
+    store: &'a Store,
+    a: &Account,
+) -> (Option<cc_same_core::usage::Usage>, Option<&'a cc_same_core::cli_usage::Reading>) {
+    let reading = store
+        .cli_accounts
+        .as_ref()
+        .and_then(|r| r.as_ref().ok())
+        .into_iter()
+        .flatten()
+        .filter(|cli| Some(&cli.email) == a.email.as_ref())
+        .filter_map(|cli| store.cli_usage.readings.get(&cli.slot))
+        .filter(|r| r.usage.is_some())
+        .max_by(|a, b| a.usage.unwrap().at.total_cmp(&b.usage.unwrap().at));
+    (
+        reading.and_then(|r| r.usage).or_else(|| store.overview.as_ref().and_then(|o| o.usage.get(&a.id)).copied()),
+        reading,
+    )
+}
+fn cli_status(reading: Option<&cc_same_core::cli_usage::Reading>) -> String {
+    t(match reading.map(|r| r.status()) {
+        Some("Valid") => "ui.valid",
+        Some("Expired") => "ui.dead",
+        Some("Renews on switch") => "ui.refreshSt",
+        _ => "ui.unknown",
+    })
+}
+fn avatar(email: &str, active: bool) -> Div {
+    div()
+        .flex_none()
+        .size(px(28.))
+        .rounded(px(8.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .when(active, |el| el.bg(gpui_kit::rgb(0xD97757)).text_color(gpui_kit::white()))
+        .child(email.chars().next().unwrap_or('—').to_uppercase().to_string())
+}
+fn in_use(cx: &App) -> AnyElement {
+    div()
+        .px_2()
+        .py_1()
+        .rounded_full()
+        .text_size(px(12.))
+        .text_color(theme::accent_text(cx))
+        .bg(gpui_kit::rgb(0xD97757).opacity(if cx.theme().is_dark() { 0.18 } else { 0.14 }))
+        .child(t("ui.inUse"))
+        .into_any_element()
+}
+#[allow(clippy::too_many_arguments)]
+fn account_row(
+    email: &str,
+    plan: String,
+    active: bool,
     usage: Option<cc_same_core::usage::Usage>,
     reading: Option<&cc_same_core::cli_usage::Reading>,
+    status: String,
+    attention: bool,
+    action: AnyElement,
     cx: &App,
 ) -> AnyElement {
-    let mut bars = h_flex().gap_4();
-    for (index, (label, value)) in
-        [("5h", usage.and_then(|u| u.five_hour)), ("7d", usage.and_then(|u| u.weekly))].into_iter().enumerate()
-    {
-        let text = value.map(|v| format!("{v:.0}%")).unwrap_or_else(|| "—".into());
-        bars = bars.child(
-            v_flex()
+    h_flex()
+        .h(px(54.))
+        .gap_3()
+        .border_b_1()
+        .border_color(cx.theme().border)
+        .child(
+            h_flex()
                 .flex_1()
                 .min_w_0()
-                .gap_1()
+                .gap_2()
+                .child(avatar(email, active).when(!active, |el| el.bg(theme::empty(cx))))
                 .child(
-                    h_flex()
+                    v_flex()
                         .flex_1()
                         .min_w_0()
-                        .gap_2()
-                        .child(div().text_size(rems(0.846)).child(label))
-                        .child(
-                            div().flex_1().child(
-                                Progress::new(SharedString::from(format!("{id}-{label}")))
-                                    .xsmall()
-                                    .accessibility_label(format!("{id} {label}: {text}"))
-                                    .value(value.unwrap_or(0.).clamp(0., 100.) as f32),
-                            ),
-                        )
-                        .child(div().w(px(32.)).text_size(rems(0.846)).child(text)),
-                )
-                .child(
-                    div()
-                        .text_size(rems(0.846))
-                        .text_color(cx.theme().muted_foreground)
-                        .child(reading.map(|r| r.reset_label(index)).unwrap_or_else(|| "—".into())),
+                        .child(div().truncate().child(email.to_owned()))
+                        .child(div().text_size(px(12.5)).text_color(cx.theme().muted_foreground).child(plan)),
                 ),
-        );
-    }
-    bars.into_any_element()
+        )
+        .child(usage_cell(usage.and_then(|u| u.five_hour), reading, 0, cx))
+        .child(usage_cell(usage.and_then(|u| u.weekly), reading, 1, cx))
+        .child(
+            div()
+                .w(px(96.))
+                .text_size(px(12.))
+                .text_color(if attention { theme::accent_text(cx) } else { cx.theme().muted_foreground })
+                .child(status),
+        )
+        .child(h_flex().w(px(90.)).justify_end().child(action))
+        .into_any_element()
+}
+fn usage_cell(
+    value: Option<f64>,
+    reading: Option<&cc_same_core::cli_usage::Reading>,
+    index: usize,
+    cx: &App,
+) -> AnyElement {
+    let hot = value.is_some_and(|v| v >= 80.);
+    let color = if hot { gpui_kit::rgb(0xD97757).into() } else { theme::bar(cx) };
+    let blocks = (0..10).map(|i| {
+        div().w(px(6.)).h(px(10.)).rounded(px(1.)).bg(if value.is_some_and(|v| (i as f64) < (v / 10.).round()) {
+            color
+        } else {
+            theme::empty(cx)
+        })
+    });
+    let reset = reading
+        .map(|r| r.reset_label(index))
+        .filter(|s| s != "—")
+        .map(|s| {
+            // The core's existing local-time formatter supplies the time; localize its date suffixes here.
+            let time = s.trim_end_matches(" 重置").replace('月', "/").replace('日', "");
+            tf("ui.resets", &[("x", &time)])
+        })
+        .unwrap_or_else(|| if value.is_none() { t("ui.noReading") } else { "—".into() });
+    v_flex()
+        .w(px(112.))
+        .gap_1()
+        .child(
+            h_flex().gap_1().child(h_flex().gap(px(2.)).children(blocks)).child(
+                div()
+                    .text_size(px(12.))
+                    .text_color(if hot { theme::accent_text(cx) } else { cx.theme().foreground })
+                    .child(value.map(|v| format!("{v:.0}%")).unwrap_or_else(|| "—".into())),
+            ),
+        )
+        .child(div().text_size(px(11.5)).text_color(cx.theme().muted_foreground).child(reset))
+        .into_any_element()
 }
