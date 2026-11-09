@@ -2683,3 +2683,63 @@ _version: 2
 "backup.manual":
   en: "Manual backup"
   zh-CN: "手动备份"
+
+"tutorial.show":
+  en: "Show tutorial"
+  zh-CN: "查看使用引导"
+
+"tutorial.back":
+  en: "Back"
+  zh-CN: "上一步"
+
+"tutorial.next":
+  en: "Next"
+  zh-CN: "下一步"
+
+"tutorial.skip":
+  en: "Skip"
+  zh-CN: "跳过"
+
+"tutorial.finish":
+  en: "Finish"
+  zh-CN: "完成"
+
+"tutorial.title0":
+  en: "Desktop and CLI"
+  zh-CN: "桌面端与 CLI"
+
+"tutorial.body0":
+  en: "These tabs switch accounts independently. Switching Desktop restarts Claude. Switching CLI does not."
+  zh-CN: "两个标签页分别切换账号，互不影响。切换桌面端账号会重启 Claude；切换 CLI 账号不会。"
+
+"tutorial.title1":
+  en: "Your current account"
+  zh-CN: "当前账号"
+
+"tutorial.body1":
+  en: "The orange card shows the account in use. Next → switches to the next saved account on this tab."
+  zh-CN: "橙色卡片显示正在使用的账号。“下一个 →”切换到当前标签页的下一个已保存账号。"
+
+"tutorial.title2":
+  en: "Usage and account status"
+  zh-CN: "用量与账号状态"
+
+"tutorial.body2":
+  en: "Each row shows 5-hour and 7-day usage, reset times, and login status. Use Switch to change accounts, or Sign in again to renew a login."
+  zh-CN: "每行显示 5 小时和 7 天用量、重置时间及登录状态。点击“切换”更换账号，或“重新登录”更新登录信息。"
+
+"tutorial.title3":
+  en: "Add a CLI account"
+  zh-CN: "添加 CLI 账号"
+
+"tutorial.body3":
+  en: "Choose + Add, then log in in a terminal with claude auth login. The app detects and saves that login. No cswap needed."
+  zh-CN: "点击“+ 添加”，然后在终端运行 claude auth login 登录。应用会检测并保存该登录信息，无需安装 cswap。"
+
+"tutorial.title4":
+  en: "Keep Desktop sessions together"
+  zh-CN: "同步桌面端会话"
+
+"tutorial.body4":
+  en: "Sync now copies sessions across Desktop accounts. Background sync stays off until you turn it on. Backups lets you save and restore snapshots."
+  zh-CN: "“立即同步”在桌面端账号间复制会话。后台同步默认关闭，直到你主动开启。“备份”可保存和恢复快照。"

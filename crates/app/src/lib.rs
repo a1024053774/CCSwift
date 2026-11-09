@@ -16,6 +16,7 @@ mod settings;
 pub mod store;
 pub mod theme;
 mod tray;
+mod tutorial;
 pub mod view;
 
 use crate::store::Store;
@@ -77,6 +78,9 @@ pub fn run() {
             KeyBinding::new("cmd-,", view::OpenSettings, Some("UniApp")),
             KeyBinding::new("ctrl-,", view::OpenSettings, Some("UniApp")),
         ]);
+        cx.on_action(|_: &view::ShowTutorial, cx| {
+            in_window(cx, |view, window, cx| view.show_tutorial(window, cx));
+        });
         set_menus(cx);
         Shell::init(store, cx);
         // Without a tray icon (turned off, or a desktop that shows none) there is nothing left to
@@ -126,6 +130,7 @@ pub fn show_window(cx: &mut App) {
 fn set_menus(cx: &mut App) {
     cx.set_menus([Menu::new(APP_NAME).items([
         MenuItem::action(i18n::t("app.settings"), view::OpenSettings),
+        MenuItem::action(i18n::t("tutorial.show"), view::ShowTutorial),
         MenuItem::separator(),
         MenuItem::action(i18n::t("app.quit"), Quit),
     ])]);

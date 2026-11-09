@@ -21,18 +21,21 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     Anchor, AnyElement, App, AppContext as _, Context, Div, Entity, FocusHandle, FontWeight, Hsla,
-    InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString, Styled as _, Subscription, Window,
-    actions, div, prelude::FluentBuilder as _, px, rems,
+    InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, actions, div, prelude::FluentBuilder as _, px, rems,
 };
 use std::rc::Rc;
 
-actions!(cc_same, [Refresh, SyncNow, OpenSettings]);
+actions!(cc_same, [Refresh, SyncNow, OpenSettings, ShowTutorial]);
 
 pub struct UniApp {
     store: Entity<Store>,
     page: usize,
+    tutorial: crate::tutorial::Tutorial,
+    tutorial_bounds: Rc<std::cell::Cell<Option<gpui_kit::Bounds<gpui_kit::Pixels>>>>,
     search: Option<Entity<InputState>>,
     sort_usage: bool,
+    content_scroll: gpui_kit::ScrollHandle,
     mark: Option<std::sync::Arc<gpui_kit::RenderImage>>,
     focus: FocusHandle,
     _subscriptions: Vec<Subscription>,
@@ -69,10 +72,13 @@ impl UniApp {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         UniApp {
+            tutorial_bounds: Default::default(),
+            tutorial: crate::tutorial::Tutorial::new(store.read(cx).config().tutorial_done),
             store,
             page: 0,
             search: Some(search),
             sort_usage: false,
+            content_scroll: gpui_kit::ScrollHandle::new(),
             mark: None,
             focus,
             _subscriptions: subscriptions,
@@ -82,10 +88,13 @@ impl UniApp {
     /// A still picture (screenshots): everything already in place.
     pub fn still(store: Entity<Store>, cx: &mut Context<Self>) -> UniApp {
         UniApp {
+            tutorial_bounds: Default::default(),
+            tutorial: crate::tutorial::Tutorial::default(),
             store,
             page: 0,
             search: None,
             sort_usage: false,
+            content_scroll: gpui_kit::ScrollHandle::new(),
             mark: None,
             focus: cx.focus_handle(),
             _subscriptions: Vec::new(),
@@ -96,6 +105,180 @@ impl UniApp {
         &self.store
     }
 
+    pub fn show_tutorial(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        window.close_sheet(cx);
+        self.tutorial.replay();
+        self.content_scroll.set_offset(gpui_kit::point(px(0.), px(0.)));
+        self.page = 0;
+        window.focus(&self.focus, cx);
+        cx.notify();
+    }
+
+    fn dismiss_tutorial(&mut self, cx: &mut Context<Self>) {
+        let mut done = self.store.read(cx).config().tutorial_done;
+        self.tutorial.dismiss(&mut done);
+        self.store.update(cx, |store, cx| store.update_config(cx, |cfg| cfg.tutorial_done = done));
+        cx.notify();
+    }
+
+    fn advance_tutorial(&mut self, back: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(step) = self.tutorial.step {
+            if !back && step == 4 {
+                self.dismiss_tutorial(cx);
+                return;
+            }
+            let step = if back { step.saturating_sub(1) } else { step + 1 };
+            self.tutorial.step = Some(step);
+            self.content_scroll.set_offset(gpui_kit::point(px(0.), px(0.)));
+            self.page = usize::from(step == 3);
+            window.focus(&self.focus, cx);
+            cx.notify();
+        }
+    }
+
+    fn tutorial_target_present(&self, cx: &App) -> bool {
+        let store = self.store.read(cx);
+        match self.tutorial.step {
+            Some(1) => store.accounts().iter().any(|a| a.login == Login::SignedIn || a.open),
+            Some(2) => !store.accounts().is_empty(),
+            _ => true,
+        }
+    }
+
+    fn coach(&self, step: usize, element: impl IntoElement, cx: &App) -> Div {
+        let bounds = self.tutorial_bounds.clone();
+        div().relative().child(element).when(
+            self.tutorial.step == Some(step) && self.tutorial_target_present(cx),
+            |el| {
+                el.child(
+                    gpui_kit::canvas(
+                        move |rect, window, _| bounds.set(Some(rect.intersect(&window.content_mask().bounds))),
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .inset_0(),
+                )
+            },
+        )
+    }
+
+    fn render_tutorial(&self, cx: &Context<Self>) -> AnyElement {
+        let step = self.tutorial.step.unwrap_or(0);
+        let present = self.tutorial_target_present(cx);
+        let target = self.tutorial_bounds.clone();
+        let accent = theme::accent_text(cx);
+        div()
+            .id("tutorial-overlay")
+            .absolute()
+            .inset_0()
+            .occlude()
+            .flex()
+            .items_center()
+            .justify_center()
+            .on_mouse_down(
+                gpui_kit::MouseButton::Left,
+                cx.listener(|this, _, window, cx| {
+                    window.focus(&this.focus, cx);
+                }),
+            )
+            .child(
+                gpui_kit::canvas(
+                    |_, _, _| {},
+                    move |bounds, _, window, _| {
+                        use gpui_kit::{Bounds, fill, point, size};
+                        let shade = gpui_kit::rgba(0x00000099);
+                        if let Some(hole) = target.get().filter(|_| present) {
+                            let hole = hole.intersect(&bounds);
+                            let rects = [
+                                Bounds::new(bounds.origin, size(bounds.size.width, hole.top() - bounds.top())),
+                                Bounds::new(
+                                    point(bounds.left(), hole.bottom()),
+                                    size(bounds.size.width, bounds.bottom() - hole.bottom()),
+                                ),
+                                Bounds::new(
+                                    point(bounds.left(), hole.top()),
+                                    size(hole.left() - bounds.left(), hole.size.height),
+                                ),
+                                Bounds::new(
+                                    point(hole.right(), hole.top()),
+                                    size(bounds.right() - hole.right(), hole.size.height),
+                                ),
+                            ];
+                            for rect in rects {
+                                window.paint_quad(fill(rect, shade));
+                            }
+                            window.paint_quad(gpui_kit::outline(hole, accent, gpui_kit::BorderStyle::Solid));
+                        } else {
+                            window.paint_quad(fill(bounds, shade));
+                        }
+                    },
+                )
+                .absolute()
+                .inset_0(),
+            )
+            .child(
+                v_flex()
+                    .w(px(580.))
+                    .when(present, |el| el.absolute().left(px(50.)).right(px(50.)))
+                    .when(present && step == 2, |el| el.top(px(100.)))
+                    .when(present && step != 2, |el| el.bottom(px(28.)))
+                    .p_5()
+                    .gap_4()
+                    .rounded(px(16.))
+                    .shadow_lg()
+                    .bg(cx.theme().background)
+                    .border_1()
+                    .border_color(theme::accent_text(cx))
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .child(div().text_size(px(21.)).child(t(&format!("tutorial.title{step}"))))
+                            .child(format!("{} / 5", step + 1)),
+                    )
+                    .child(div().text_size(px(16.)).child(t(&format!("tutorial.body{step}"))))
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .child(
+                                Button::new("tutorial-skip")
+                                    .ghost()
+                                    .label(t("tutorial.skip"))
+                                    .on_click(cx.listener(|this, _, _, cx| this.dismiss_tutorial(cx))),
+                            )
+                            .child(h_flex().gap_2().children((0..5).map(|i| {
+                                div().size(px(7.)).rounded_full().bg(if i == step {
+                                    theme::accent_text(cx)
+                                } else {
+                                    cx.theme().muted_foreground
+                                })
+                            })))
+                            .child(
+                                h_flex()
+                                    .gap_2()
+                                    .child(
+                                        Button::new("tutorial-back")
+                                            .outline()
+                                            .label(t("tutorial.back"))
+                                            .disabled(step == 0)
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.advance_tutorial(true, window, cx)
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("tutorial-next")
+                                            .primary()
+                                            .bg(theme::jelly())
+                                            .label(t(if step == 4 { "tutorial.finish" } else { "tutorial.next" }))
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.advance_tutorial(false, window, cx)
+                                            })),
+                                    ),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
+
     // ------------------------------------------------------------------ actions
 
     fn sync_now(&mut self, cx: &mut Context<Self>) {
@@ -103,7 +286,9 @@ impl UniApp {
     }
 
     pub fn open_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        settings::open(self.store.clone(), window, cx);
+        if self.tutorial.step.is_none() {
+            settings::open(self.store.clone(), window, cx);
+        }
     }
 
     pub fn confirm_restore(&mut self, snapshot: &Manifest, window: &mut Window, cx: &mut Context<Self>) {
@@ -410,23 +595,31 @@ impl UniApp {
             .pt(px(14.))
             .gap_2()
             .justify_between()
-            .child(h_flex().p(px(3.)).gap(px(3.)).rounded(px(10.)).bg(cx.theme().muted).children((0..2).map(|index| {
-                Button::new(if index == 0 { "desktop-tab" } else { "cli-tab" })
-                    .ghost()
-                    .w(px(if count > 4 { 83. } else { 113. }))
-                    .h(px(32.))
-                    .label(t(if index == 0 { "page.desktop" } else { "page.cli" }))
-                    .bg(if self.page == index {
-                        if cx.theme().is_dark() { theme::empty(cx) } else { cx.theme().background }
-                    } else {
-                        gpui_kit::transparent_black()
-                    })
-                    .text_color(if self.page == index { cx.theme().foreground } else { cx.theme().muted_foreground })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.page = index;
-                        cx.notify();
-                    }))
-            })))
+            .child(self.coach(
+                0,
+                h_flex().p(px(3.)).gap(px(3.)).rounded(px(10.)).bg(cx.theme().muted).children((0..2).map(|index| {
+                    Button::new(if index == 0 { "desktop-tab" } else { "cli-tab" })
+                        .ghost()
+                        .w(px(if count > 4 { 83. } else { 113. }))
+                        .h(px(32.))
+                        .label(t(if index == 0 { "page.desktop" } else { "page.cli" }))
+                        .bg(if self.page == index {
+                            if cx.theme().is_dark() { theme::empty(cx) } else { cx.theme().background }
+                        } else {
+                            gpui_kit::transparent_black()
+                        })
+                        .text_color(if self.page == index {
+                            cx.theme().foreground
+                        } else {
+                            cx.theme().muted_foreground
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.page = index;
+                            cx.notify();
+                        }))
+                })),
+                cx,
+            ))
             .child(
                 h_flex()
                     .gap_2()
@@ -443,7 +636,8 @@ impl UniApp {
                             cx.notify();
                         },
                     )))
-                    .child(
+                    .child(self.coach(
+                        3,
                         Button::new("add-account").small().primary().label(t("ui.add")).bg(theme::jelly()).on_click(
                             cx.listener(|this, _, window, cx| {
                                 if this.page == 1 {
@@ -453,7 +647,8 @@ impl UniApp {
                                 }
                             }),
                         ),
-                    ),
+                        cx,
+                    )),
             )
             .into_any_element()
     }
@@ -934,13 +1129,20 @@ impl Render for UniApp {
                 search.update(cx, |input, cx| input.set_placeholder(placeholder, window, cx));
             }
         }
+        self.tutorial_bounds.set(None);
         let content = v_flex()
             .px(px(18.))
             .py(px(14.))
             .gap(px(12.))
-            .child(self.render_current(&accounts, cx))
-            .when(self.page == 0, |el| el.child(self.render_background(cx)))
-            .child(self.render_table(&accounts, cx))
+            .child(self.coach(1, self.render_current(&accounts, cx), cx))
+            .when(self.page == 0, |el| {
+                let card = self.render_background(cx);
+                el.child(self.coach(4, card, cx))
+            })
+            .child({
+                let table = self.render_table(&accounts, cx);
+                self.coach(2, table, cx)
+            })
             .child(
                 h_flex()
                     .justify_between()
@@ -954,6 +1156,17 @@ impl Render for UniApp {
             .relative()
             .key_context("UniApp")
             .track_focus(&self.focus)
+            .capture_key_down(cx.listener(|this, event: &gpui_kit::KeyDownEvent, window, cx| {
+                if this.tutorial.step.is_some() {
+                    match event.keystroke.key.as_str() {
+                        "right" => this.advance_tutorial(false, window, cx),
+                        "left" => this.advance_tutorial(true, window, cx),
+                        "escape" => this.dismiss_tutorial(cx),
+                        _ => {}
+                    }
+                    cx.stop_propagation();
+                }
+            }))
             .on_action(cx.listener(|this, _: &Refresh, _, cx| this.store.update(cx, |s, cx| s.refresh_usage(cx))))
             .on_action(cx.listener(|this, _: &SyncNow, _, cx| this.sync_now(cx)))
             .on_action(cx.listener(|this, _: &OpenSettings, window, cx| this.open_settings(window, cx)))
@@ -966,7 +1179,16 @@ impl Render for UniApp {
             .text_size(px(14.))
             .child(self.render_title_bar(cx))
             .child(self.render_pages(cx))
-            .child(div().id("content").flex_1().min_h_0().overflow_y_scrollbar().child(content))
+            .child(
+                div()
+                    .id("content")
+                    .track_scroll(&self.content_scroll)
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scrollbar()
+                    .child(content),
+            )
+            .when(self.tutorial.step.is_some(), |el| el.child(self.render_tutorial(cx)))
     }
 }
 

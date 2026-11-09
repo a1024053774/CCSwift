@@ -43,6 +43,14 @@ fn body(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
     let muted = cx.theme().muted_foreground;
 
     let mut general = vec![
+        Button::new("show-tutorial")
+            .outline()
+            .label(t("tutorial.show"))
+            .on_click(|_, window, cx| {
+                window.close_sheet(cx);
+                window.dispatch_action(Box::new(crate::view::ShowTutorial), cx);
+            })
+            .into_any_element(),
         row(
             t("settings.theme"),
             None,

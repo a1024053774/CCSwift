@@ -38,6 +38,10 @@ The 720×660 window has two tabs: **Desktop | CLI**, with usage in every account
   Search appears above four accounts; sorting puts the highest 5-hour usage first.
   Unknown plan names and reset times display “—”; CLI rows show their real slot number.
 
+On first open, a five-step tutorial explains the tabs, current account, usage table, CLI add flow,
+and session sync. Finish or Skip (Esc) dismisses it for later opens. Replay it with **Show tutorial**
+in Settings or the app menu; use the arrow keys or Back/Next to move between steps.
+
 Desktop and CLI are switched independently. The white and black themes use warm greys and
 Claude orange, with Times New Roman for English and Songti SC for Simplified Chinese. Other
 languages fall back to English. The optional Claude mark is read from the installed Claude.app

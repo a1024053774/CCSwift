@@ -8,3 +8,5 @@
 
 - **CLI capture**: save the terminal’s current login into the claude-swap store. Add returns an existing slot without rewriting it; Update login replaces only a slot with the same email and organization. Both use the switch locks and roll back failed writes.
 - **CLI status**: Valid after a successful usage fetch; RenewsOnSwitch when stored access has expired and a refresh token exists; Expired after a non-expired credential receives HTTP 401/403; Unknown before reading or after a network/429 failure. CCSwift does not refresh tokens.
+
+- **Tutorial completion**: `tutorialDone` in the existing app config is false until the first tutorial is finished or skipped. Replay starts the five steps without clearing that flag.
