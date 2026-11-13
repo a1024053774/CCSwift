@@ -82,6 +82,9 @@ pub struct Store {
     cli_loading: bool,
     cli_usage_revision: u64,
     pub cli_usage: cc_same_core::cli_usage::Cache,
+    /// The last reset times read for each CLI account, by email, kept across restarts so the
+    /// Desktop row of the same account can show them after its CLI login can no longer be read.
+    pub known_resets: KnownResets,
     pub usage_loading: bool,
     pub usage_error: Option<String>,
     /// The app opens (hidden) at login.
@@ -109,6 +112,7 @@ impl Global for GlobalStore {}
 
 impl Store {
     fn blank(ctx: Arc<Ctx>) -> Store {
+        let known_resets = load_resets(&ctx.paths.state_dir);
         Store {
             ctx,
             overview: None,
@@ -119,6 +123,7 @@ impl Store {
             cli_switching: None,
             cli_loading: false,
             cli_usage: Default::default(),
+            known_resets,
             cli_usage_revision: 0,
             usage_loading: false,
             usage_error: None,
@@ -234,9 +239,11 @@ impl Store {
         self.refresh(cx);
         let revision = self.cli_usage_revision;
         let mut cache = self.cli_usage.clone();
+        let mut resets = self.known_resets.clone();
+        let state_dir = self.ctx.paths.state_dir.clone();
         cx.notify();
         cx.spawn(async move |this, cx| {
-            let (cache, accounts) = cx
+            let (cache, accounts, resets) = cx
                 .background_executor()
                 .spawn(async move {
                     let accounts =
@@ -245,8 +252,11 @@ impl Store {
                         });
                     if let Ok(accounts) = &accounts {
                         cache.refresh(accounts);
+                        if remember_resets(&mut resets, accounts, &cache) {
+                            save_resets(&state_dir, &resets);
+                        }
                     }
-                    (cache, accounts)
+                    (cache, accounts, resets)
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -256,6 +266,7 @@ impl Store {
                     return;
                 }
                 this.cli_usage = cache;
+                this.known_resets = resets;
                 this.usage_error = accounts.as_ref().err().cloned();
                 this.cli_accounts = Some(accounts);
                 this.usage_loading = false;
@@ -768,8 +779,82 @@ fn fingerprint(ctx: &Ctx) -> u64 {
     h.finish()
 }
 
+/// Reset times of the 5-hour and weekly windows (RFC 3339), by account email.
+pub type KnownResets = std::collections::BTreeMap<String, [Option<String>; 2]>;
+
+const RESETS_FILE: &str = "cli-resets.json";
+
+fn load_resets(state_dir: &std::path::Path) -> KnownResets {
+    cc_same_core::fsx::read_json(&state_dir.join(RESETS_FILE), 64 * 1024)
+        .ok()
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default()
+}
+
+/// Takes the reset times of every reading that just succeeded; a window with no reset (not
+/// started) replaces an older one. Returns whether anything changed.
+fn remember_resets(
+    known: &mut KnownResets,
+    accounts: &[cc_same_core::cli_accounts::Account],
+    cache: &cc_same_core::cli_usage::Cache,
+) -> bool {
+    let mut changed = false;
+    for account in accounts {
+        let Some(reading) = cache.readings.get(&account.slot) else { continue };
+        if reading.problem.is_some() || reading.usage.is_none() {
+            continue;
+        }
+        if known.get(&account.email) != Some(&reading.resets_at) {
+            known.insert(account.email.clone(), reading.resets_at.clone());
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn save_resets(state_dir: &std::path::Path, resets: &KnownResets) {
+    if let Ok(payload) = serde_json::to_vec_pretty(resets) {
+        // Best effort: without the file the Desktop rows only lose times they can read again later.
+        let _ = cc_same_core::fsx::atomic_write(&state_dir.join(RESETS_FILE), &payload, None, false);
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    // Fails if a failed reading erases saved times (they would vanish once a CLI login expires),
+    // if a fresh reading does not replace them, or if an unchanged reading rewrites the file.
+    #[test]
+    fn known_resets_follow_successful_readings_only() {
+        use cc_same_core::cli_usage::{Cache, Problem, Reading};
+        let account = |slot, email: &str| cc_same_core::cli_accounts::Account {
+            slot,
+            email: email.into(),
+            organization: String::new(),
+            organization_uuid: String::new(),
+            active: false,
+        };
+        let accounts = [account(1, "a@example.com"), account(2, "b@example.com")];
+        let reading = |resets: [Option<&str>; 2], problem| {
+            let mut r = Reading::default();
+            r.usage = Some(cc_same_core::usage::Usage { at: 1., five_hour: Some(5.), weekly: Some(50.) });
+            r.resets_at = resets.map(|s| s.map(str::to_owned));
+            r.problem = problem;
+            r
+        };
+        let old = [Some("2026-11-13T14:39:00Z".to_string()), Some("2026-11-13T18:59:00Z".to_string())];
+        let mut known = KnownResets::from([("a@example.com".to_string(), old.clone())]);
+        let mut cache = Cache::default();
+        cache.readings.insert(1, reading([Some("2026-11-20T00:00:00Z"), None], Some(Problem::Expired)));
+        cache.readings.insert(2, reading([None, Some("2026-11-19T00:00:00Z")], None));
+        assert!(remember_resets(&mut known, &accounts, &cache));
+        assert_eq!(known["a@example.com"], old, "a failed reading keeps what was saved");
+        assert_eq!(known["b@example.com"], [None, Some("2026-11-19T00:00:00Z".to_string())]);
+        assert!(!remember_resets(&mut known, &accounts, &cache), "nothing new, nothing to write");
+        cache.readings.insert(1, reading([None, Some("2026-11-20T00:00:00Z")], None));
+        assert!(remember_resets(&mut known, &accounts, &cache));
+        assert_eq!(known["a@example.com"], [None, Some("2026-11-20T00:00:00Z".to_string())]);
+    }
+
     use super::*;
 
     #[test]

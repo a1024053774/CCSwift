@@ -42,18 +42,15 @@ impl Reading {
             None => "Unknown",
         }
     }
+}
 
-    pub fn reset_label(&self, window: usize) -> String {
-        self.resets_at[window]
-            .as_deref()
-            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-            .map(|at| {
-                at.with_timezone(&chrono::Local)
-                    .format(if window == 0 { "%H:%M 重置" } else { "%m月%d日 %H:%M 重置" })
-                    .to_string()
-            })
-            .unwrap_or_else(|| "—".into())
-    }
+/// When a window resets, in local time: the hour for the 5-hour window (0), the date too for the
+/// weekly one (1). None when unknown or already past (`now`, Unix seconds): the next window's reset
+/// is not known until it is read again.
+pub fn reset_time(at: &str, window: usize, now: f64) -> Option<String> {
+    let at = chrono::DateTime::parse_from_rfc3339(at).ok()?;
+    ((at.timestamp() as f64) > now)
+        .then(|| at.with_timezone(&chrono::Local).format(if window == 0 { "%H:%M" } else { "%m/%d %H:%M" }).to_string())
 }
 
 /// Lives with the app store, so reopening the window does not reset the throttle.
@@ -271,9 +268,21 @@ mod tests {
             123.,
         )
         .unwrap();
-        assert_eq!(unknown.reset_label(0), "—");
-        assert_eq!(unknown.reset_label(1), "—");
+        assert_eq!(unknown.resets_at[0], None);
+        assert_eq!(reset_time(unknown.resets_at[1].as_deref().unwrap(), 1, 0.), None);
         assert_eq!(unknown.usage.unwrap().weekly, Some(73.));
+    }
+
+    // A reset that has passed must not be shown as the next one; one ahead is shown.
+    #[test]
+    fn reset_time_only_ahead() {
+        let at = "2026-11-13T18:59:00Z";
+        let when = chrono::DateTime::parse_from_rfc3339(at).unwrap().timestamp() as f64;
+        assert!(reset_time(at, 0, when - 60.).is_some_and(|s| s.len() == 5), "5h shows the hour");
+        assert!(reset_time(at, 1, when - 60.).is_some_and(|s| s.len() == 11), "7d shows the date too");
+        assert_eq!(reset_time(at, 1, when), None);
+        assert_eq!(reset_time(at, 0, when + 3600.), None);
+        assert_eq!(reset_time("not a time", 0, 0.), None);
     }
 
     #[test]

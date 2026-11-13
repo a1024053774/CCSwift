@@ -895,7 +895,7 @@ impl UniApp {
             }
             for a in accounts.iter().filter(|a| account_email(a).to_lowercase().contains(&query)) {
                 let active = a.open || a.login == Login::SignedIn;
-                let (usage, reading) = desktop_usage(store, a);
+                let (usage, resets) = desktop_usage(store, a);
                 let action = if active {
                     in_use(cx)
                 } else {
@@ -906,7 +906,7 @@ impl UniApp {
                     "—".into(),
                     active,
                     usage,
-                    reading,
+                    resets,
                     t(if a.login == Login::Unknown { "ui.none" } else { "ui.saved" }),
                     a.login == Login::Unknown,
                     action,
@@ -967,7 +967,7 @@ impl UniApp {
                     tf("ui.slot", &[("n", &slot)]),
                     a.active,
                     reading.and_then(|r| r.usage),
-                    reading,
+                    reading.map(|r| r.resets_at.clone()).unwrap_or_default(),
                     cli_status(reading),
                     expired,
                     action,
@@ -1275,10 +1275,10 @@ fn notice(
 fn account_email(a: &Account) -> String {
     a.email.clone().unwrap_or_else(|| tf("account.unnamed", &[("id", &cc_same_core::short(&a.id))]))
 }
-fn desktop_usage<'a>(
-    store: &'a Store,
-    a: &Account,
-) -> (Option<cc_same_core::usage::Usage>, Option<&'a cc_same_core::cli_usage::Reading>) {
+/// A Desktop account's usage, and when its 5-hour and weekly windows reset. Desktop's own record
+/// has no reset times, so they come from the CLI reading of the same account, or the last ones
+/// saved from it (`Store::known_resets`).
+fn desktop_usage(store: &Store, a: &Account) -> (Option<cc_same_core::usage::Usage>, [Option<String>; 2]) {
     let reading = store
         .cli_accounts
         .as_ref()
@@ -1289,9 +1289,13 @@ fn desktop_usage<'a>(
         .filter_map(|cli| store.cli_usage.readings.get(&cli.slot))
         .filter(|r| r.usage.is_some())
         .max_by(|a, b| a.usage.unwrap().at.total_cmp(&b.usage.unwrap().at));
+    let resets = reading
+        .map(|r| r.resets_at.clone())
+        .or_else(|| a.email.as_ref().and_then(|email| store.known_resets.get(email)).cloned())
+        .unwrap_or_default();
     (
         reading.and_then(|r| r.usage).or_else(|| store.overview.as_ref().and_then(|o| o.usage.get(&a.id)).copied()),
-        reading,
+        resets,
     )
 }
 fn cli_status(reading: Option<&cc_same_core::cli_usage::Reading>) -> String {
@@ -1330,7 +1334,7 @@ fn account_row(
     plan: String,
     active: bool,
     usage: Option<cc_same_core::usage::Usage>,
-    reading: Option<&cc_same_core::cli_usage::Reading>,
+    resets: [Option<String>; 2],
     status: String,
     attention: bool,
     action: AnyElement,
@@ -1355,8 +1359,8 @@ fn account_row(
                         .child(div().text_size(px(12.5)).text_color(cx.theme().muted_foreground).child(plan)),
                 ),
         )
-        .child(usage_cell(usage.and_then(|u| u.five_hour), reading, 0, cx))
-        .child(usage_cell(usage.and_then(|u| u.weekly), reading, 1, cx))
+        .child(usage_cell(usage.and_then(|u| u.five_hour), resets[0].as_deref(), 0, cx))
+        .child(usage_cell(usage.and_then(|u| u.weekly), resets[1].as_deref(), 1, cx))
         .child(
             div()
                 .w(px(96.))
@@ -1367,12 +1371,7 @@ fn account_row(
         .child(h_flex().w(px(90.)).justify_end().child(action))
         .into_any_element()
 }
-fn usage_cell(
-    value: Option<f64>,
-    reading: Option<&cc_same_core::cli_usage::Reading>,
-    index: usize,
-    cx: &App,
-) -> AnyElement {
+fn usage_cell(value: Option<f64>, resets_at: Option<&str>, index: usize, cx: &App) -> AnyElement {
     let hot = value.is_some_and(|v| v >= 80.);
     let color = if hot { gpui_kit::rgb(0xD97757).into() } else { theme::bar(cx) };
     let blocks = (0..10).map(|i| {
@@ -1382,14 +1381,9 @@ fn usage_cell(
             theme::empty(cx)
         })
     });
-    let reset = reading
-        .map(|r| r.reset_label(index))
-        .filter(|s| s != "—")
-        .map(|s| {
-            // The core's existing local-time formatter supplies the time; localize its date suffixes here.
-            let time = s.trim_end_matches(" 重置").replace('月', "/").replace('日', "");
-            tf("ui.resets", &[("x", &time)])
-        })
+    let reset = resets_at
+        .and_then(|at| cc_same_core::cli_usage::reset_time(at, index, cc_same_core::fsx::now_secs()))
+        .map(|time| tf("ui.resets", &[("x", &time)]))
         .unwrap_or_else(|| if value.is_none() { t("ui.noReading") } else { "—".into() });
     v_flex()
         .w(px(112.))

@@ -44,6 +44,9 @@ The 720×660 window has two tabs: **Desktop | CLI**, with usage in every account
   rows prefer successful CLI readings for the same email, otherwise Claude Desktop’s local
   history. CLI readings include reset times from the OAuth usage endpoint and are cached for
   a minute; add, update, or switch clears the cache. Refresh never writes credentials.
+  Claude Desktop’s history has no reset times, so a Desktop row shows the ones read for the
+  same email on the CLI side. The last ones read are kept in `cli-resets.json` in the state
+  folder, so they still show after a restart or after that CLI login expires, until they pass.
   Search appears above four accounts; sorting puts the highest 5-hour usage first.
   Unknown plan names and reset times display “—”; CLI rows show their real slot number.
 
