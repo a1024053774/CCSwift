@@ -185,6 +185,12 @@ fn quit_and_swap(ctx: &Ctx, to: Option<&str>, was_running: bool, watch: &desktop
     }
     recover(&ctx.paths)?;
     let from = desktop::last_known_account(ctx);
+    // Before any sign-in moves: an error here refuses the switch with nothing changed.
+    let carried = crate::desktop_prefs::carry(&ctx.paths, from.as_deref(), to, ctx.config().keep_browser_sign_ins)
+        .context("carrying Desktop preferences to the next account")?;
+    if !carried.is_empty() {
+        ctx.log(format!("Desktop preferences carried: {}", carried.join(", ")));
+    }
     if from.is_some() && from.as_deref() == to {
         // Already signed in to it; a copy set aside earlier is out of date.
         if let Some(account) = to {
@@ -576,6 +582,41 @@ mod tests {
         assert_eq!(mac.owner(), format!("cookies of {GRACE}"));
         let keys = fsx::read_json(&saved_dir(&mac.ctx.paths, ADA).join(KEYS_FILE), 1 << 20).unwrap();
         assert_eq!(keys["oauth:tokenCacheV2"], "rotated tokens of ada");
+    }
+
+    #[test]
+    fn a_switch_carries_desktop_preferences_and_the_browser_choice() {
+        let mac = Mac::new(ADA);
+        switch(&mac.ctx, Target::SignedOut, &desktop::Watch::default()).unwrap();
+        mac.sign_in(GRACE);
+        let prefs_path = mac.data().join(crate::desktop_prefs::FILE);
+        let order = format!("code-projects-order.{GRACE}");
+        let permission = format!("epitaxy-folder-permission-mode-v2.{GRACE}");
+        let body = serde_json::json!({ "preferences": { "epitaxyPrefs": {
+            order.clone(): ["/work"], permission.clone(): { "/work": "bypassPermissions" },
+        }}});
+        fs::write(&prefs_path, serde_json::to_vec(&body).unwrap()).unwrap();
+        let mut cfg = mac.ctx.config();
+        cfg.keep_browser_sign_ins = true;
+        mac.ctx.set_config(cfg);
+
+        switch(&mac.ctx, Target::Account(ADA), &desktop::Watch::default()).unwrap();
+        assert_eq!(mac.owner(), format!("cookies of {ADA}"));
+        let prefs = fsx::read_json(&prefs_path, 1 << 20).unwrap()["preferences"].clone();
+        assert_eq!(prefs["epitaxyPrefs"][format!("code-projects-order.{ADA}")], serde_json::json!(["/work"]));
+        assert!(prefs["epitaxyPrefs"].get(format!("epitaxy-folder-permission-mode-v2.{ADA}")).is_none());
+        assert_eq!(prefs["launchPreviewStorage"], "shared");
+    }
+
+    #[test]
+    fn a_broken_preferences_file_refuses_the_switch_before_anything_moves() {
+        let mac = Mac::new(ADA);
+        switch(&mac.ctx, Target::SignedOut, &desktop::Watch::default()).unwrap();
+        mac.sign_in(GRACE);
+        fs::write(mac.data().join(crate::desktop_prefs::FILE), "{not json").unwrap();
+        assert!(switch(&mac.ctx, Target::Account(ADA), &desktop::Watch::default()).is_err());
+        assert_eq!(mac.owner(), format!("cookies of {GRACE}"));
+        assert!(is_saved(&mac.ctx.paths, ADA));
     }
 
     #[test]

@@ -126,6 +126,14 @@ fn body(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
             toggle(store, "auto-join", cfg.auto_join_new, idle, |c, on| c.auto_join_new = on),
             cx,
         ),
+        row(
+            t("settings.browser"),
+            Some(t("settings.browser.detail")),
+            toggle(store, "keep-browser-sign-ins", cfg.keep_browser_sign_ins, idle, |c, on| {
+                c.keep_browser_sign_ins = on
+            }),
+            cx,
+        ),
     ];
 
     let people: Vec<AnyElement> = if accounts.is_empty() {

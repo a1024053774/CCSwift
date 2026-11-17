@@ -31,7 +31,13 @@ The 720×660 window has two tabs: **Desktop | CLI**, with usage in every account
   background switch. **Backups** lists local snapshots with their size and source, offers
   **Back up now**, restore confirmation (quit Claude first), Reveal in Finder, and retention
   of 10, 20, or 50 snapshots. Automatic snapshots happen during sync at the configured interval
-  (one hour by default), and before restore; the baseline is always kept.
+  (one hour by default), and before restore; the baseline is always kept. A switch also copies a
+  few per-account Desktop preferences (Code project order, rate-limit auto-resume opt-in, Cowork
+  model fallback, notices already seen) to the next account; permission modes and bypass gates
+  stay per account. Settings › **Keep side browser sign-ins** (off by default) makes each switch
+  set Claude's side browser to keep site sign-ins on disk, shared by all accounts; open tabs are
+  not kept. The previous `claude_desktop_config.json` is kept under
+  `logins/desktop-prefs-before/` in the state folder.
 - **CLI**: the accounts in claude-swap's store (`~/.claude-swap-backup`), in slot order. Click
   **Switch** (or use the tray's *CLI* submenu) to change the account the `claude` command uses,
   using the same store as `cswap`. Claude Desktop is not touched. **+ Add** opens a dialog
@@ -109,6 +115,10 @@ cc-same config         --exclude <account-id>, --auto-join off, …
 | Code scheduled tasks and task suggestions | ✅ |
 | Transcripts, `CLAUDE.md`, skills, `settings.json`, local MCP servers | Already shared by Claude |
 | Connectors, Remote Control links, published artifacts, pins | Kept per account |
+| Per-account Desktop preferences (project order, auto-resume opt-in, model fallback, seen notices) | ✅ Copied to the next account at a switch |
+| Per-folder permission modes, bypass-permission gates | Kept per account |
+| Side browser site sign-ins | ✅ With *Keep side browser sign-ins*; otherwise Claude clears them at every restart |
+| Side browser open tabs | ✗ Claude keeps them in memory only |
 | Sidebar groups and order | ✗ Synced with each account's server settings, replaced at every sign-in |
 | claude.ai chats, projects, memory, cloud sessions | ✗ Stored in each account in the cloud |
 | Cowork tasks | ✗ On Pro and Max plans, new ones run in the cloud too |

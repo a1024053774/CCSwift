@@ -45,6 +45,9 @@ pub struct Config {
     /// Desktop app: download new versions in the background and install them while the window
     /// is closed.
     pub auto_update: bool,
+    /// Desktop switches set Claude's side browser to keep site sign-ins on disk, shared by every
+    /// account ([`crate::desktop_prefs`]).
+    pub keep_browser_sign_ins: bool,
 }
 
 impl Default for Config {
@@ -64,6 +67,7 @@ impl Default for Config {
             tutorial_done: false,
             check_updates: true,
             auto_update: true,
+            keep_browser_sign_ins: false,
         }
     }
 }

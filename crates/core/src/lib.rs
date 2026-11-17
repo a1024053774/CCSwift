@@ -23,6 +23,7 @@ pub mod apply;
 pub mod cli_accounts;
 pub mod config;
 pub mod desktop;
+pub mod desktop_prefs;
 pub mod fsx;
 pub mod logins;
 pub mod merge;

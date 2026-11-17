@@ -6,6 +6,9 @@
 - **Usage**: 5-hour and weekly plan percentages for an account, with when they were read.
 - **Inline usage**: 5-hour and weekly readings in each Desktop or CLI account row. Desktop rows prefer a successful CLI reading for the same email, otherwise Desktop’s local history; reset times come from that CLI reading or the last ones saved for the email (`cli-resets.json`), shown only while still ahead.
 
+- **Carried preferences**: at a Desktop switch, an allowlist of per-account entries in Claude's `claude_desktop_config.json` is copied from the account left to the target before any sign-in moves (`desktop_prefs`). A missing source entry never deletes the target's; permission modes and bypass gates are never copied.
+- **Keep browser sign-ins**: `keepBrowserSignIns` in the app config. When on, each switch sets Claude's `launchPreviewStorage` to `shared`, whose jar under `Partitions/` is not keyed by account and never moved by a switch.
+
 - **CLI capture**: save the terminal’s current login into the claude-swap store. Add returns an existing slot without rewriting it; Update login replaces only a slot with the same email and organization. Both use the switch locks and roll back failed writes.
 - **CLI status**: Valid after a successful usage fetch; RenewsOnSwitch when stored access has expired and a refresh token exists; Expired after a non-expired credential receives HTTP 401/403; Unknown before reading or after a network/429 failure. CCSwift does not refresh tokens.
 
